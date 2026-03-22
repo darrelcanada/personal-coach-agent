@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 import uvicorn
 import requests
 import os
+import json
 from dotenv import load_dotenv
 
 from langchain_community.llms import Ollama
@@ -14,31 +15,24 @@ load_dotenv()
 DISCORD_BOT_URL = os.getenv("DISCORD_BOT_URL", "http://localhost:8000")
 DB_CONNECTION_STRING = "sqlite:///memory.db"
 CONVERSATION_HISTORY_LIMIT = 20 # Number of past messages to include in the context
+PERSONAS_FILE = "personas.json" # File containing persona definitions
 
-# --- LangChain Setup ---
+# Load personas from JSON file
+try:
+    with open(PERSONAS_FILE, 'r') as f:
+        PERSONAS = json.load(f)
+except FileNotFoundError:
+    print(f"Error: {PERSONAS_FILE} not found. Please create it.")
+    PERSONAS = {"default": "You are a helpful assistant."} # Fallback
+except json.JSONDecodeError:
+    print(f"Error: {PERSONAS_FILE} is not a valid JSON file.")
+    PERSONAS = {"default": "You are a helpful assistant."} # Fallback
 
-# 1. Define the agent's persona with a system prompt
-system_prompt = """
-You are a world-class personal trainer and physical therapist AI named 'Coach'. 
-Your goal is to help me, the user, achieve my fitness and health goals.
-You will start by interviewing me to understand my current fitness level, any injuries or limitations, and my long-term goals.
-Based on this, you will develop a personalized weekly exercise routine.
-You must be supportive, knowledgeable, and proactive. Check in with me, ask about my progress, and be ready to adjust the plan based on my feedback.
-Your tone should be encouraging and professional.
-"""
 
-# 2. Set up the prompt template
-prompt = ChatPromptTemplate.from_messages([
-    ("system", system_prompt),
-    MessagesPlaceholder(variable_name="chat_history"),
-    ("human", "{input}"),
-])
+# --- LangChain Setup (LLM is still global, chain will be dynamic) ---
 
-# 3. Instantiate the local LLM
+# Instantiate the local LLM (this can remain global as it's not persona-specific)
 llm = Ollama(model="llama3:8b")
-
-# 4. Create the LangChain chain
-chain = prompt | llm | StrOutputParser()
 
 # --- FastAPI Server ---
 
@@ -56,28 +50,41 @@ async def receive_message(request: Request):
 
     print(f"Received message from {author} in channel {channel_id}: {content}")
 
-    # 1. Get conversation history from the database
+    # 1. Select the appropriate system prompt for the channel
+    # Use .get() with a default to handle cases where a channel_id isn't explicitly in PERSONAS
+    selected_system_prompt = PERSONAS.get(channel_id, PERSONAS.get("default"))
+
+    # 2. Create the prompt template and chain dynamically for this request
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", selected_system_prompt),
+        MessagesPlaceholder(variable_name="chat_history"),
+        ("human", "{input}"),
+    ])
+    current_chain = prompt | llm | StrOutputParser()
+
+
+    # 3. Get conversation history from the database
     history = SQLChatMessageHistory(
         session_id=channel_id,
         connection_string=DB_CONNECTION_STRING
     )
     
-    # 2. Limit the history to avoid overflowing the context window
+    # 4. Limit the history to avoid overflowing the context window
     limited_history = history.messages[-CONVERSATION_HISTORY_LIMIT:]
 
-    # 3. Invoke the chain to get the agent's response
-    print("Invoking LangChain agent with history...")
-    ai_response = chain.invoke({
+    # 5. Invoke the chain to get the agent's response
+    print(f"Invoking LangChain agent for channel {channel_id} with persona: {selected_system_prompt[:50]}...")
+    ai_response = current_chain.invoke({
         "input": content,
         "chat_history": limited_history,
     })
     print(f"Agent response: {ai_response}")
 
-    # 4. Save the new messages to the database
+    # 6. Save the new messages to the database
     history.add_user_message(content)
     history.add_ai_message(ai_response)
 
-    # 5. Send the response back to Discord
+    # 7. Send the response back to Discord
     try:
         requests.post(
             f"{DISCORD_BOT_URL}/send_discord_message/",
@@ -89,7 +96,7 @@ async def receive_message(request: Request):
     return {"status": "message processed"}
 
 def run_agent_server():
-    print("Starting LangChain agent server with SQLite persistence...")
+    print("Starting LangChain agent server with SQLite persistence and multi-persona support...")
     uvicorn.run(app, host="0.0.0.0", port=8001)
 
 if __name__ == "__main__":
