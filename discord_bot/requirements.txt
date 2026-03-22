@@ -1,0 +1,6 @@
+discord.py
+APScheduler
+python-dotenv
+fastapi
+uvicorn
+requests
