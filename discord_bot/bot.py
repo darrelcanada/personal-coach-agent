@@ -13,6 +13,7 @@ import requests
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 AGENT_WEBHOOK_URL = os.getenv("AGENT_WEBHOOK_URL")
+LANGCHAIN_AGENT_URL = os.getenv("LANGCHAIN_AGENT_URL", "http://localhost:8001") # Added for proactive messages
 
 # Initialize Discord Bot
 intents = discord.Intents.default()
@@ -29,7 +30,9 @@ app = FastAPI()
 async def on_ready():
     print(f'Bot connected as {bot.user}')
     scheduler.start()
-    print("Scheduler started.")
+    scheduler.add_job(send_proactive_trainer_message, 'interval', seconds=30, id='proactive_trainer_checkin')
+    print("Scheduler started with proactive trainer check-in every 30 seconds.")
+
 
 @bot.event
 async def on_message(message):
@@ -56,6 +59,23 @@ async def on_message(message):
             print(f"Error forwarding message to agent: {e}")
     else:
         print("AGENT_WEBHOOK_URL not set. Message not forwarded.")
+
+# Function to send proactive trainer message
+async def send_proactive_trainer_message():
+    trainer_channel_id = 1478120173071499264  # Trainer persona's channel ID
+    proactive_llm_input = "Hey there! Trainer Coach checking in. What exercise achievements did you hit today? Share your progress!"
+    langchain_agent_url = os.getenv("LANGCHAIN_AGENT_URL", "http://localhost:8001") # Assuming agent runs on 8001
+
+    try:
+        payload = {
+            "channel_id": str(trainer_channel_id), # Ensure channel_id is string for FastAPI agent
+            "message_content": proactive_llm_input
+        }
+        response = requests.post(f"{langchain_agent_url}/proactive_message", json=payload)
+        response.raise_for_status() # Raise an exception for HTTP errors (4xx or 5xx)
+        print(f"Proactive trainer message request sent to agent. Status: {response.status_code}")
+    except requests.exceptions.RequestException as e:
+        print(f"Error sending proactive trainer message to agent: {e}")
 
 # Function to send a scheduled message
 async def send_scheduled_message(channel_id: int, message_content: str):
