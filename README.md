@@ -139,3 +139,27 @@ Once both components are running:
     # View all entries in the user_profile table
     sqlite3 langchain_agent/memory.db "SELECT * FROM user_profile;"
     ```
+
+### User Profile Management
+
+You can set and update your basic profile information, which provides foundational context for calculations and personalized coaching. This data is stored in the `user_profile` table.
+
+**Examples:**
+*   `Set profile: Age: 30, Sex: Male, Height: 175cm, Goal weight: 70kg, Activity: moderate`
+*   `Update profile: Age: 31, Activity: active`
+
+The `user_profile` table schema:
+```
+CREATE TABLE IF NOT EXISTS user_profile (
+    user_id TEXT PRIMARY KEY,
+    age INTEGER,
+    sex TEXT,
+    height_cm REAL,
+    baseline_weight_kg REAL,
+    goal_weight_kg REAL,
+    activity_level TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+```
+
