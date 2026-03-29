@@ -73,36 +73,6 @@ def initialize_health_database():
         if conn:
             conn.close()
 
-# --- Database Initialization for Health Data ---
-def initialize_health_database():
-    """Initializes the SQLite database and creates the health_log table if it doesn't exist."""
-    db_path = DB_CONNECTION_STRING.replace("sqlite:///", "")
-    conn = None
-    try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS health_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id TEXT NOT NULL,
-                log_date DATE NOT NULL,
-                weight REAL,
-                walking_steps INTEGER,
-                walking_distance REAL,
-                sleep_duration_hours REAL,
-                daily_goals_steps INTEGER,
-                daily_goals_workout TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        conn.commit()
-        print(f"Health log database initialized at {db_path}")
-    except sqlite3.Error as e:
-        print(f"Error initializing health log database: {e}")
-    finally:
-        if conn:
-            conn.close()
-
 # --- Health Data Logging ---
 def log_health_data(user_id: str, message_content: str) -> str:
     """
@@ -184,6 +154,88 @@ def log_health_data(user_id: str, message_content: str) -> str:
         if conn:
             conn.close()
 
+# --- Health Data Querying ---
+def process_health_query(user_id: str, message_content: str) -> str:
+    """
+    Processes a health data query from the message content and retrieves data from the database.
+    Returns a formatted response.
+    """
+    db_path = DB_CONNECTION_STRING.replace("sqlite:///", "")
+    conn = None
+    response_message = "I couldn't find any data matching your query."
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # --- Parameter Extraction (simple keyword-based for now) ---
+        metric = None
+        time_period = None
+        
+        message_lower = message_content.lower()
+
+        # Extract Metric
+        if "walk" in message_lower or "distance" in message_lower:
+            metric = "walking_distance"
+        elif "steps" in message_lower:
+            metric = "walking_steps"
+        elif "weight" in message_lower:
+            metric = "weight"
+        elif "sleep" in message_lower or "duration" in message_lower:
+            metric = "sleep_duration_hours"
+        # Add more metrics as needed
+
+        # Extract Time Period
+        from datetime import datetime, timedelta
+        end_date = date.today()
+        start_date = None
+
+        if "today" in message_lower:
+            start_date = end_date
+        elif "this week" in message_lower or "past week" in message_lower:
+            start_date = end_date - timedelta(days=6) # Last 7 days including today
+        elif "this month" in message_lower or "past month" in message_lower:
+            # Simple approximation for "this month"
+            start_date = end_date.replace(day=1)
+        elif "last month" in message_lower:
+            first_day_this_month = end_date.replace(day=1)
+            start_date = (first_day_this_month - timedelta(days=1)).replace(day=1)
+            end_date = first_day_this_month - timedelta(days=1)
+        # Add more time periods as needed
+
+        if metric and start_date:
+            query = f"SELECT {metric} FROM health_log WHERE user_id = ? AND log_date BETWEEN ? AND ?"
+            cursor.execute(query, (user_id, start_date.isoformat(), end_date.isoformat()))
+            results = cursor.fetchall()
+
+            if results:
+                values = [r[0] for r in results if r[0] is not None] # Filter out None values
+                if values:
+                    # Basic aggregation
+                    if metric in ["walking_distance", "walking_steps", "sleep_duration_hours"]:
+                        total = sum(values)
+                        response_message = f"Your total {metric.replace('_', ' ')} for the period is: {total:.1f}"
+                    elif metric == "weight":
+                        latest_weight = values[-1] # Get the most recent weight
+                        response_message = f"Your latest recorded weight is: {latest_weight:.1f}"
+                    # Add more sophisticated aggregation/reporting as needed
+                else:
+                    response_message = f"No {metric.replace('_', ' ')} data found for the specified period."
+            else:
+                response_message = f"No {metric.replace('_', ' ')} data found for the specified period."
+        else:
+            response_message = "I couldn't understand your health data query. Please specify a metric (e.g., 'walk', 'weight', 'sleep') and a time period (e.g., 'today', 'this week', 'this month')."
+
+    except sqlite3.Error as e:
+        print(f"Error querying health data: {e}")
+        response_message = "An error occurred while trying to retrieve your health data."
+    except Exception as e:
+        print(f"Error in process_health_query: {e}")
+        response_message = "An unexpected error occurred while processing your query."
+    finally:
+        if conn:
+            conn.close()
+    return response_message
+
 # --- LangChain Setup ---
 
 
@@ -214,6 +266,18 @@ async def _process_message_and_respond(channel_id: str, input_content: str, is_p
         except requests.exceptions.RequestException as e:
             print(f"Error sending message to Discord bot: {e}")
         return {"status": "health data processed"}
+    # Check for health data query intent
+    elif any(input_content.lower().startswith(p) for p in ["how much", "how many", "what is my", "report my", "my "]) and user_id:
+        response_message = process_health_query(user_id, input_content)
+        # Send the response back to Discord
+        try:
+            requests.post(
+                f"{DISCORD_BOT_URL}/send_discord_message/",
+                params={"channel_id": channel_id, "message_content": response_message}
+            )
+        except requests.exceptions.RequestException as e:
+            print(f"Error sending message to Discord bot: {e}")
+        return {"status": "health query processed"}
     
     # Select the appropriate system prompt for the channel
     selected_system_prompt = PERSONAS.get(channel_id, PERSONAS.get("default"))
