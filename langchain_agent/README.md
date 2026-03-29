@@ -33,6 +33,8 @@ This directory contains the LangChain agent that acts as a personal coach. It ru
     ```
     Users can log data by starting their message with "Log health:". The agent uses regex parsing to extract metrics like weight, walking distance/steps, sleep duration, and daily goals. If successful, it confirms the log to the user.
 
+*   **Health Data Querying:** The agent can also process queries about logged health data. Users can ask questions like "How much did I walk this week?" or "What is my weight today?". The agent will attempt to parse the metric and time period from the query, retrieve relevant data from the `health_log` table, and provide a summary.
+
 ## Architectural Flow
 
 The `langchain_agent` operates as a FastAPI application that integrates with a Discord bot.

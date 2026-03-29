@@ -123,7 +123,15 @@ Once both components are running:
     *   `Log health: Goals: 12000 steps, 30min run`
     *   `Log health: Weight: 75.5kg, Walked 10000 steps, Slept 7.5 hours`
 
-    To view your logged health data, you can use the `sqlite3` CLI tool:
+    **Querying Health Data:** You can ask the agent questions about your logged health data. The agent will attempt to retrieve and summarize the relevant information.
+
+    **Examples:**
+    *   `How much did I walk this week?`
+    *   `What is my weight today?`
+    *   `How many steps did I take yesterday?`
+    *   `How long did I sleep last month?`
+
+    To view your logged health data directly in the database, you can use the `sqlite3` CLI tool:
     ```bash
     sqlite3 langchain_agent/memory.db "SELECT * FROM health_log;"
     ```

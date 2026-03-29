@@ -5,7 +5,8 @@ import os
 import json
 from dotenv import load_dotenv # Added load_dotenv
 import re # Added for regex parsing
-from datetime import date # Added for log_date
+from datetime import date, timedelta # Added for log_date and timedelta
+
 
 
 load_dotenv() # Load .env from the project root by default
@@ -267,7 +268,7 @@ async def _process_message_and_respond(channel_id: str, input_content: str, is_p
             print(f"Error sending message to Discord bot: {e}")
         return {"status": "health data processed"}
     # Check for health data query intent
-    elif any(input_content.lower().startswith(p) for p in ["how much", "how many", "what is my", "report my", "my "]) and user_id:
+    elif any(input_content.lower().startswith(p) for p in ["how much", "how many", "how far", "what is my", "report my", "my "]) and user_id:
         response_message = process_health_query(user_id, input_content)
         # Send the response back to Discord
         try:
