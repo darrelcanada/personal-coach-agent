@@ -4,28 +4,34 @@ This directory contains the LangChain agent that acts as a personal coach. It ru
 
 ## Features
 
-*   **Dynamic Personas:** The agent can adopt different personas based on the Discord channel ID. These personas are configured directly within `agent.py` in the `PERSONAS` dictionary, allowing for specialized interactions (e.g., a "Trainer" persona for fitness-related channels). A `default` persona is used if no specific channel ID matches.
+*   **Dynamic Personas:** The agent can adopt different personas based on the Discord channel ID. These personas are configured in the `config.json` file in the project's root directory, allowing for specialized interactions (e.g., a "Trainer" persona for fitness-related channels). A `default` persona is used if no specific channel ID matches.
 *   **Conversation History / Memory:** The agent maintains conversation history using `SQLChatMessageHistory` with an SQLite database (`memory.db`). This ensures that context is preserved across interactions within each Discord channel, up to a configurable limit (`CONVERSATION_HISTORY_LIMIT`). The database file `memory.db` is created automatically upon the first interaction.
 *   **LLM Integration:** Utilizes Ollama with the `llama3:8b` model for generating responses.
 *   **FastAPI Endpoints:** Exposes endpoints for handling incoming messages from the Discord bot and for triggering proactive messages.
 *   **Proactive Messaging Capabilities:** Can generate and send proactive messages when triggered by an external system (like the Discord bot's internal scheduler).
 
-## Setup
+## Data Storage
 
-1.  **Create a virtual environment and install dependencies:**
-    ```bash
-    python3 -m venv venv
-    source venv/bin/activate
-    pip install -r requirements.txt
-    ```
+*   **Conversation History / Memory:** The agent maintains conversation history using `SQLChatMessageHistory` with an SQLite database (`memory.db`). This ensures that context is preserved across interactions within each Discord channel, up to a configurable limit (`CONVERSATION_HISTORY_LIMIT`). The database file `memory.db` is created automatically upon the first interaction.
 
-2.  **Configure Environment Variables:**
-    Create a file named `.env` in this `langchain_agent` directory if you need to override the default `DISCORD_BOT_URL`.
+*   **Health Data Logging:** The agent now supports logging health data directly from Discord messages. This data is stored in a separate `health_log` table within the same `memory.db` SQLite database.
+
+    The `health_log` table schema:
     ```
-    # Example .env for langchain_agent
-    # DISCORD_BOT_URL="http://localhost:8000" # URL of the Discord bot's FastAPI server (default is http://localhost:8000)
+    CREATE TABLE IF NOT EXISTS health_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL,
+        log_date DATE NOT NULL,
+        weight REAL,
+        walking_steps INTEGER,
+        walking_distance REAL,
+        sleep_duration_hours REAL,
+        daily_goals_steps INTEGER,
+        daily_goals_workout TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
     ```
-    `DISCORD_BOT_URL` is crucial for the agent to send responses back to the Discord bot. Other configurations like `DB_CONNECTION_STRING` and `CONVERSATION_HISTORY_LIMIT` are set directly in `agent.py`.
+    Users can log data by starting their message with "Log health:". The agent uses regex parsing to extract metrics like weight, walking distance/steps, sleep duration, and daily goals. If successful, it confirms the log to the user.
 
 ## Architectural Flow
 
@@ -92,4 +98,8 @@ If `config.json` or its "personas" section is not found or is invalid, the agent
 
 ### Conversation History Limit
 
-The `CONVERSATION_HISTORY_LIMIT` constant in `langchain_agent/agent.py` defines the number of past messages to include in the LLM's context for each conversation. Adjust this value to control the agent's memory length.
+The `CONVERSATION_HISTORY_LIMIT` is now configured in `config.json` in the project root. This value defines the number of past messages to include in the LLM's context for each conversation. Adjust this value to control the agent's memory length.
+
+### Database Connection String
+
+The `DB_CONNECTION_STRING` for the SQLite database is also configured in `config.json`. By default, it uses `sqlite:///memory.db`.
