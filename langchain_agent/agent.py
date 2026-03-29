@@ -66,6 +66,19 @@ def initialize_health_database():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_profile (
+                user_id TEXT PRIMARY KEY,
+                age INTEGER,
+                sex TEXT,
+                height_cm REAL,
+                baseline_weight_kg REAL,
+                goal_weight_kg REAL,
+                activity_level TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         conn.commit()
         print(f"Health log database initialized at {db_path}")
     except sqlite3.Error as e:
@@ -237,6 +250,118 @@ def process_health_query(user_id: str, message_content: str) -> str:
             conn.close()
     return response_message
 
+    return response_message
+
+# --- User Profile Management ---
+def process_user_profile(user_id: str, message_content: str) -> str:
+    """
+    Parses user profile data from the message content and logs it to the user_profile table.
+    Returns a confirmation message.
+    """
+    db_path = DB_CONNECTION_STRING.replace("sqlite:///", "")
+    conn = None
+    response_message = "I couldn't understand your profile update. Please use formats like 'Set profile: Age: 30, Sex: Male, Height: 175cm, Goal weight: 70kg, Activity: moderate'."
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # Initialize profile data points
+        age = None
+        sex = None
+        height_cm = None
+        baseline_weight_kg = None
+        goal_weight_kg = None
+        activity_level = None
+
+        message_lower = message_content.lower()
+
+        # Regex patterns for extraction
+        age_match = re.search(r"age:?\s*(\d+)", message_lower)
+        if age_match:
+            age = int(age_match.group(1))
+
+        sex_match = re.search(r"sex:?\s*(male|female|non-binary)", message_lower)
+        if sex_match:
+            sex = sex_match.group(1).capitalize()
+
+        height_match = re.search(r"height:?\s*(\d+\.?\d*)\s*(cm|m)", message_lower)
+        if height_match:
+            height_val = float(height_match.group(1))
+            if height_match.group(2) == 'm':
+                height_cm = height_val * 100 # Convert meters to cm
+            else:
+                height_cm = height_val
+
+        baseline_weight_match = re.search(r"(current|baseline)\s*weight:?\s*(\d+\.?\d*)\s*(kg|lbs)", message_lower)
+        if baseline_weight_match:
+            weight_val = float(baseline_weight_match.group(2))
+            if baseline_weight_match.group(3) == 'lbs':
+                baseline_weight_kg = weight_val * 0.453592 # Convert lbs to kg
+            else:
+                baseline_weight_kg = weight_val
+
+        goal_weight_match = re.search(r"goal\s*weight:?\s*(\d+\.?\d*)\s*(kg|lbs)", message_lower)
+        if goal_weight_match:
+            weight_val = float(goal_weight_match.group(1))
+            if goal_weight_match.group(2) == 'lbs':
+                goal_weight_kg = weight_val * 0.453592 # Convert lbs to kg
+            else:
+                goal_weight_kg = weight_val
+
+        activity_match = re.search(r"activity:?\s*(sedentary|moderate|active)", message_lower)
+        if activity_match:
+            activity_level = activity_match.group(1)
+
+        if any([age, sex, height_cm, baseline_weight_kg, goal_weight_kg, activity_level]):
+            # Check if profile exists
+            cursor.execute("SELECT user_id FROM user_profile WHERE user_id = ?", (user_id,))
+            profile_exists = cursor.fetchone()
+
+            if profile_exists:
+                # Update existing profile
+                update_fields = []
+                update_values = []
+                if age is not None: update_fields.append("age = ?"); update_values.append(age)
+                if sex is not None: update_fields.append("sex = ?"); update_values.append(sex)
+                if height_cm is not None: update_fields.append("height_cm = ?"); update_values.append(height_cm)
+                if baseline_weight_kg is not None: update_fields.append("baseline_weight_kg = ?"); update_values.append(baseline_weight_kg)
+                if goal_weight_kg is not None: update_fields.append("goal_weight_kg = ?"); update_values.append(goal_weight_kg)
+                if activity_level is not None: update_fields.append("activity_level = ?"); update_values.append(activity_level)
+                
+                if update_fields:
+                    update_fields.append("updated_at = CURRENT_TIMESTAMP")
+                    update_values.append(user_id) # user_id for WHERE clause
+                    query = f"UPDATE user_profile SET {', '.join(update_fields)} WHERE user_id = ?"
+                    cursor.execute(query, tuple(update_values))
+                    conn.commit()
+                    response_message = "Your profile has been updated successfully!"
+                else:
+                    response_message = "I couldn't find any profile fields to update from your message."
+            else:
+                # Insert new profile
+                cursor.execute(
+                    """
+                    INSERT INTO user_profile (user_id, age, sex, height_cm, baseline_weight_kg, goal_weight_kg, activity_level)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (user_id, age, sex, height_cm, baseline_weight_kg, goal_weight_kg, activity_level)
+                )
+                conn.commit()
+                response_message = "Your profile has been created successfully!"
+        else:
+            response_message = "I couldn't parse any valid profile information from your message. Please make sure to specify fields like Age, Sex, Height, Current weight, Goal weight, and Activity level."
+
+    except sqlite3.Error as e:
+        print(f"Error managing user profile: {e}")
+        response_message = "An error occurred while trying to manage your profile."
+    except Exception as e:
+        print(f"Error in process_user_profile: {e}")
+        response_message = "An unexpected error occurred while processing your profile update."
+    finally:
+        if conn:
+            conn.close()
+    return response_message
+
 # --- LangChain Setup ---
 
 
@@ -279,6 +404,18 @@ async def _process_message_and_respond(channel_id: str, input_content: str, is_p
         except requests.exceptions.RequestException as e:
             print(f"Error sending message to Discord bot: {e}")
         return {"status": "health query processed"}
+    # Check for user profile update intent
+    elif any(input_content.lower().startswith(p) for p in ["set profile:", "my profile is:", "update profile:"]) and user_id:
+        response_message = process_user_profile(user_id, input_content)
+        # Send the response back to Discord
+        try:
+            requests.post(
+                f"{DISCORD_BOT_URL}/send_discord_message/",
+                params={"channel_id": channel_id, "message_content": response_message}
+            )
+        except requests.exceptions.RequestException as e:
+            print(f"Error sending message to Discord bot: {e}")
+        return {"status": "user profile processed"}
     
     # Select the appropriate system prompt for the channel
     selected_system_prompt = PERSONAS.get(channel_id, PERSONAS.get("default"))
