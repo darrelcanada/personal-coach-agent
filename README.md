@@ -133,5 +133,9 @@ Once both components are running:
 
     To view your logged health data directly in the database, you can use the `sqlite3` CLI tool:
     ```bash
+    # View all entries in the health_log table
     sqlite3 langchain_agent/memory.db "SELECT * FROM health_log;"
+
+    # View all entries in the user_profile table
+    sqlite3 langchain_agent/memory.db "SELECT * FROM user_profile;"
     ```

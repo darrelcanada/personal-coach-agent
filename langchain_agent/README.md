@@ -35,6 +35,15 @@ This directory contains the LangChain agent that acts as a personal coach. It ru
 
 *   **Health Data Querying:** The agent can also process queries about logged health data. Users can ask questions like "How much did I walk this week?" or "What is my weight today?". The agent will attempt to parse the metric and time period from the query, retrieve relevant data from the `health_log` table, and provide a summary.
 
+To view your health-related data directly in the database, you can use the `sqlite3` CLI tool from the project root:
+```bash
+# View all entries in the health_log table
+sqlite3 langchain_agent/memory.db "SELECT * FROM health_log;"
+
+# View all entries in the user_profile table
+sqlite3 langchain_agent/memory.db "SELECT * FROM user_profile;"
+```
+
 ## Architectural Flow
 
 The `langchain_agent` operates as a FastAPI application that integrates with a Discord bot.
