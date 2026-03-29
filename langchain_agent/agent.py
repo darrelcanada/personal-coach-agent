@@ -3,7 +3,12 @@ import uvicorn
 import requests
 import os
 import json
-from dotenv import load_dotenv
+from dotenv import load_dotenv # Added load_dotenv
+import re # Added for regex parsing
+from datetime import date # Added for log_date
+
+
+load_dotenv() # Load .env from the project root by default
 
 from langchain_community.llms import Ollama
 from langchain_community.chat_message_histories import SQLChatMessageHistory
@@ -34,13 +39,159 @@ PERSONAS = config.get("personas", {"default": "You are a helpful general-purpose
 
 
 
+import sqlite3 # Added for database interaction
+
+# ... (rest of the imports and configuration loading)
+
+# --- Database Initialization for Health Data ---
+def initialize_health_database():
+    """Initializes the SQLite database and creates the health_log table if it doesn't exist."""
+    db_path = DB_CONNECTION_STRING.replace("sqlite:///", "")
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS health_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
+                log_date DATE NOT NULL,
+                weight REAL,
+                walking_steps INTEGER,
+                walking_distance REAL,
+                sleep_duration_hours REAL,
+                daily_goals_steps INTEGER,
+                daily_goals_workout TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+        print(f"Health log database initialized at {db_path}")
+    except sqlite3.Error as e:
+        print(f"Error initializing health log database: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+# --- Database Initialization for Health Data ---
+def initialize_health_database():
+    """Initializes the SQLite database and creates the health_log table if it doesn't exist."""
+    db_path = DB_CONNECTION_STRING.replace("sqlite:///", "")
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS health_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
+                log_date DATE NOT NULL,
+                weight REAL,
+                walking_steps INTEGER,
+                walking_distance REAL,
+                sleep_duration_hours REAL,
+                daily_goals_steps INTEGER,
+                daily_goals_workout TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+        print(f"Health log database initialized at {db_path}")
+    except sqlite3.Error as e:
+        print(f"Error initializing health log database: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+# --- Health Data Logging ---
+def log_health_data(user_id: str, message_content: str) -> str:
+    """
+    Parses health data from the message content and logs it to the database.
+    Returns a confirmation message.
+    """
+    db_path = DB_CONNECTION_STRING.replace("sqlite:///", "")
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        # Initialize data points
+        weight = None
+        walking_steps = None
+        walking_distance = None
+        sleep_duration_hours = None
+        daily_goals_steps = None
+        daily_goals_workout = None
+
+        # Regex patterns for extraction
+        # Weight log: "Weight: 75.5kg" or "75.5kg weight"
+        weight_match = re.search(r"weight:?\s*(\d+\.?\d*)\s*(kg|lbs)", message_content, re.IGNORECASE)
+        if weight_match:
+            weight = float(weight_match.group(1))
+
+        # Walking: "Walked 10000 steps" or "5km walk"
+        steps_match = re.search(r"(\d+)\s*steps", message_content, re.IGNORECASE)
+        if steps_match:
+            walking_steps = int(steps_match.group(1))
+
+        distance_match = re.search(r"(\d+\.?\d*)\s*(km|mi)\s*walk", message_content, re.IGNORECASE)
+        if distance_match:
+            walking_distance = float(distance_match.group(1))
+
+        # Sleep duration: "Slept 7.5 hours"
+        sleep_match = re.search(r"slept:?\s*(\d+\.?\d*)\s*hours", message_content, re.IGNORECASE)
+        if sleep_match:
+            sleep_duration_hours = float(sleep_match.group(1))
+
+        # Daily goals: "Goals: 12000 steps, 30min run"
+        goals_match = re.search(r"goals:?\s*(.+)", message_content, re.IGNORECASE)
+        if goals_match:
+            goals_text = goals_match.group(1)
+            steps_goal_match = re.search(r"(\d+)\s*steps", goals_text, re.IGNORECASE)
+            if steps_goal_match:
+                daily_goals_steps = int(steps_goal_match.group(1))
+            workout_goal_match = re.search(r"(\d+min\s*run|\d+min\s*workout)", goals_text, re.IGNORECASE) # Example, can be expanded
+            if workout_goal_match:
+                daily_goals_workout = workout_goal_match.group(1).strip()
+
+
+        if any([weight, walking_steps, walking_distance, sleep_duration_hours, daily_goals_steps, daily_goals_workout]):
+            cursor.execute(
+                """
+                INSERT INTO health_log (user_id, log_date, weight, walking_steps, walking_distance, sleep_duration_hours, daily_goals_steps, daily_goals_workout)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    user_id,
+                    date.today().isoformat(), # Log as YYYY-MM-DD
+                    weight,
+                    walking_steps,
+                    walking_distance,
+                    sleep_duration_hours,
+                    daily_goals_steps,
+                    daily_goals_workout
+                )
+            )
+            conn.commit()
+            return "Health data logged successfully! Thanks for keeping track."
+        else:
+            return "Could not parse health data from your message. Please use formats like 'Weight: 75.5kg', 'Walked 10000 steps', 'Slept 7.5 hours', 'Goals: 12000 steps, 30min run'."
+
+    except sqlite3.Error as e:
+        print(f"Error logging health data: {e}")
+        return "An error occurred while trying to log your health data."
+    finally:
+        if conn:
+            conn.close()
+
 # --- LangChain Setup ---
+
 
 # Instantiate the local LLM
 llm = Ollama(model="llama3:8b")
 
 # --- Helper Function to Process Messages and Respond ---
-async def _process_message_and_respond(channel_id: str, input_content: str, is_proactive_message: bool = False):
+async def _process_message_and_respond(channel_id: str, input_content: str, is_proactive_message: bool = False, user_id: str = None):
     """
     Processes a message through the LangChain agent and sends a response to Discord.
     
@@ -49,7 +200,20 @@ async def _process_message_and_respond(channel_id: str, input_content: str, is_p
         input_content (str): The content to be processed by the LLM.
         is_proactive_message (bool): True if this is a proactive message initiated by the system,
                                      False if it's a user-initiated message.
+        user_id (str): The ID of the user sending the message, for health logging.
     """
+    # Check for health data logging intent
+    if input_content.lower().startswith("log health:") and user_id:
+        response_message = log_health_data(user_id, input_content)
+        # Send the response back to Discord
+        try:
+            requests.post(
+                f"{DISCORD_BOT_URL}/send_discord_message/",
+                params={"channel_id": channel_id, "message_content": response_message}
+            )
+        except requests.exceptions.RequestException as e:
+            print(f"Error sending message to Discord bot: {e}")
+        return {"status": "health data processed"}
     
     # Select the appropriate system prompt for the channel
     selected_system_prompt = PERSONAS.get(channel_id, PERSONAS.get("default"))
@@ -108,12 +272,13 @@ async def receive_message(request: Request):
     channel_id = str(data.get("channel_id"))
     author = data.get("author")
     content = data.get("content")
+    user_id = data.get("user_id") # Get user_id from the incoming data
 
     if author == "agent": # Prevent infinite loops if agent replies to its own messages
         return {"status": "message from agent ignored"}
 
     print(f"Received user-initiated message from {author} in channel {channel_id}: {content}")
-    return await _process_message_and_respond(channel_id, content, is_proactive_message=False)
+    return await _process_message_and_respond(channel_id, content, is_proactive_message=False, user_id=user_id)
 
 
 @app.post("/proactive_message")
@@ -130,6 +295,7 @@ async def proactive_message_endpoint(channel_id: str = Body(..., embed=True), me
 
 def run_agent_server():
     print("Starting LangChain agent server with SQLite persistence and proactive support...")
+    initialize_health_database() # Initialize health database
     uvicorn.run(app, host="0.0.0.0", port=8001)
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 import os
 import discord
-import json # Added for JSON handling
+import json
 from dotenv import load_dotenv
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
@@ -9,6 +9,8 @@ import threading
 import asyncio
 
 import requests
+
+load_dotenv() # Load .env from the project root by default
 
 # --- Configuration Loading ---
 CONFIG_FILE = "../config.json" # Assumes config.json is in the parent directory (project root)
@@ -33,15 +35,15 @@ except FileNotFoundError:
 except json.JSONDecodeError:
     print(f"Error: {CONFIG_FILE} is not a valid JSON file. Using default configurations.")
     config = {
+        "discord_bot_url": "http://localhost:8000",
+        "db_connection_string": "sqlite:///memory.db",
+        "conversation_history_limit": 20,
+        "personas": {
+            "default": "You are a helpful general-purpose AI assistant. Please respond concisely."
+        },
         "discord_bot": {
             "agent_webhook_url": "http://localhost:8001/message",
             "langchain_agent_url": "http://localhost:8001"
-        },
-        "personas": {
-            "default": {
-                "reactive_prompt": "You are a helpful general-purpose AI assistant. Please respond concisely.",
-                "proactive_prompt": "You are a helpful general-purpose AI assistant. Please provide a brief, friendly check-in."
-            }
         },
         "proactive_scheduling": {}
     }
@@ -119,6 +121,7 @@ async def on_message(message):
             payload = {
                 "channel_id": message.channel.id,
                 "author": message.author.display_name,
+                "user_id": str(message.author.id), # Added user_id
                 "content": message.content
             }
             requests.post(AGENT_WEBHOOK_URL, json=payload)
