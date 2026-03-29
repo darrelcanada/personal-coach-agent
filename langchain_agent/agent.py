@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request, Body
 import uvicorn
 import requests
 import os
+import json
 from dotenv import load_dotenv
 
 from langchain_community.llms import Ollama
@@ -11,14 +12,27 @@ from langchain_core.output_parsers import StrOutputParser
 
 # --- Configuration ---
 load_dotenv()
-DISCORD_BOT_URL = os.getenv("DISCORD_BOT_URL", "http://localhost:8000")
-DB_CONNECTION_STRING = "sqlite:///memory.db"
-CONVERSATION_HISTORY_LIMIT = 20 # Number of past messages to include in the context
 
-PERSONAS = {
-    "default": "You are a helpful general-purpose AI assistant. Please respond concisely.",
-    "1478120173071499264": "You are a cheerful and encouraging personal trainer AI named 'Coach'. Your goal is to help users achieve their fitness goals with positive reinforcement."
-}
+# Load configurations from config.json
+try:
+    # Construct the absolute path to config.json
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(current_dir, "..", "config.json")
+    with open(config_path, 'r') as f:
+        config = json.load(f)
+except FileNotFoundError:
+    print("Error: config.json not found. Please create it in the root directory.")
+    exit(1)
+except json.JSONDecodeError:
+    print("Error: config.json is not a valid JSON file.")
+    exit(1)
+
+DISCORD_BOT_URL = os.getenv("DISCORD_BOT_URL", config.get("discord_bot_url", "http://localhost:8000"))
+DB_CONNECTION_STRING = config.get("db_connection_string", "sqlite:///memory.db") # Now from config.json or default
+CONVERSATION_HISTORY_LIMIT = config.get("conversation_history_limit", 20) # Now from config.json or default
+PERSONAS = config.get("personas", {"default": "You are a helpful general-purpose AI assistant. Please respond concisely."})
+
+
 
 # --- LangChain Setup ---
 

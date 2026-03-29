@@ -1,5 +1,6 @@
 import os
 import discord
+import json # Added for JSON handling
 from dotenv import load_dotenv
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
@@ -9,11 +10,45 @@ import asyncio
 
 import requests
 
-# Load environment variables from .env file
-load_dotenv()
+# --- Configuration Loading ---
+CONFIG_FILE = "../config.json" # Assumes config.json is in the parent directory (project root)
+try:
+    with open(CONFIG_FILE, 'r') as f:
+        config = json.load(f)
+except FileNotFoundError:
+    print(f"Error: {CONFIG_FILE} not found. Please create it with the necessary configurations.")
+    config = {
+        "discord_bot_url": "http://localhost:8000",
+        "db_connection_string": "sqlite:///memory.db",
+        "conversation_history_limit": 20,
+        "personas": {
+            "default": "You are a helpful general-purpose AI assistant. Please respond concisely."
+        },
+        "discord_bot": {
+            "agent_webhook_url": "http://localhost:8001/message",
+            "langchain_agent_url": "http://localhost:8001"
+        },
+        "proactive_scheduling": {}
+    }
+except json.JSONDecodeError:
+    print(f"Error: {CONFIG_FILE} is not a valid JSON file. Using default configurations.")
+    config = {
+        "discord_bot": {
+            "agent_webhook_url": "http://localhost:8001/message",
+            "langchain_agent_url": "http://localhost:8001"
+        },
+        "personas": {
+            "default": {
+                "reactive_prompt": "You are a helpful general-purpose AI assistant. Please respond concisely.",
+                "proactive_prompt": "You are a helpful general-purpose AI assistant. Please provide a brief, friendly check-in."
+            }
+        },
+        "proactive_scheduling": {}
+    }
+
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-AGENT_WEBHOOK_URL = os.getenv("AGENT_WEBHOOK_URL")
-LANGCHAIN_AGENT_URL = os.getenv("LANGCHAIN_AGENT_URL", "http://localhost:8001") # Added for proactive messages
+AGENT_WEBHOOK_URL = config["discord_bot"].get("agent_webhook_url")
+LANGCHAIN_AGENT_URL = config["discord_bot"].get("langchain_agent_url")
 
 # Initialize Discord Bot
 intents = discord.Intents.default()
@@ -30,8 +65,41 @@ app = FastAPI()
 async def on_ready():
     print(f'Bot connected as {bot.user}')
     scheduler.start()
-    scheduler.add_job(send_proactive_trainer_message, 'interval', seconds=30, id='proactive_trainer_checkin')
-    print("Scheduler started with proactive trainer check-in every 30 seconds.")
+    print("Scheduler started.")
+
+    # Schedule proactive messages from config
+    proactive_schedules = config.get("proactive_scheduling", {})
+    for job_name, job_details in proactive_schedules.items():
+        channel_id = job_details.get("channel_id")
+        interval_seconds = job_details.get("interval_seconds")
+        message_content = job_details.get("message_content")
+
+        if channel_id and interval_seconds:
+            scheduler.add_job(
+                _send_proactive_message_to_agent,
+                'interval',
+                seconds=interval_seconds,
+                args=[channel_id, message_content],
+                id=job_name # Assign a unique ID to the job
+            )
+            print(f"Scheduled proactive message '{job_name}' for channel {channel_id} every {interval_seconds} seconds.")
+        else:
+            print(f"Warning: Proactive schedule '{job_name}' is missing channel_id or interval_seconds.")
+
+# Helper function to send proactive messages to the agent
+async def _send_proactive_message_to_agent(channel_id: int, message_content: str):
+    """Sends a proactive message to the LangChain agent to generate a response."""
+    if LANGCHAIN_AGENT_URL:
+        try:
+            requests.post(
+                f"{LANGCHAIN_AGENT_URL}/proactive_message",
+                json={"channel_id": str(channel_id), "message_content": message_content}
+            )
+            print(f"Sent proactive message request to agent for channel {channel_id}.")
+        except requests.exceptions.RequestException as e:
+            print(f"Error sending proactive message to agent: {e}")
+    else:
+        print("LANGCHAIN_AGENT_URL not set. Proactive message not sent.")
 
 
 @bot.event
@@ -59,23 +127,6 @@ async def on_message(message):
             print(f"Error forwarding message to agent: {e}")
     else:
         print("AGENT_WEBHOOK_URL not set. Message not forwarded.")
-
-# Function to send proactive trainer message
-async def send_proactive_trainer_message():
-    trainer_channel_id = 1478120173071499264  # Trainer persona's channel ID
-    proactive_llm_input = "Hey there! Trainer Coach checking in. What exercise achievements did you hit today? Share your progress!"
-    langchain_agent_url = os.getenv("LANGCHAIN_AGENT_URL", "http://localhost:8001") # Assuming agent runs on 8001
-
-    try:
-        payload = {
-            "channel_id": str(trainer_channel_id), # Ensure channel_id is string for FastAPI agent
-            "message_content": proactive_llm_input
-        }
-        response = requests.post(f"{langchain_agent_url}/proactive_message", json=payload)
-        response.raise_for_status() # Raise an exception for HTTP errors (4xx or 5xx)
-        print(f"Proactive trainer message request sent to agent. Status: {response.status_code}")
-    except requests.exceptions.RequestException as e:
-        print(f"Error sending proactive trainer message to agent: {e}")
 
 # Function to send a scheduled message
 async def send_scheduled_message(channel_id: int, message_content: str):

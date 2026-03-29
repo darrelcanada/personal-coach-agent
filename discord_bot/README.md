@@ -7,7 +7,6 @@ This project is a Python-based Discord bot designed to facilitate communication 
 *   **Discord Message Monitoring:** The bot listens to messages in all channels it has access to. User messages (excluding its own and `!hello` commands) are forwarded to the configured LangChain agent for processing.
 *   **`!hello` Command:** A simple command. If you type `!hello`, the bot will respond with `Hello <your_username>!`.
 *   **API for External Agents:** A FastAPI server runs alongside the bot, exposing endpoints for sending immediate messages and scheduling recurring messages.
-*   **Proactive Trainer Check-in:** The bot includes an internal scheduler to periodically send proactive messages from the 'trainer' persona (managed by the LangChain agent) to a designated Discord channel.
 *   **Asynchronous Operations:** Leverages `asyncio` for efficient handling of Discord events and `APScheduler` for concurrent task scheduling.
 
 ## Project Structure

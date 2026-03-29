@@ -77,16 +77,18 @@ The agent will be running on `http://0.0.0.0:8001`. Ensure this URL is correctly
 
 ### Personas
 
-Personas are defined in the `PERSONAS` dictionary within `langchain_agent/agent.py`. Each key is a Discord `channel_id` (as a string), and its value is the system prompt for that channel. The `"default"` key provides a fallback persona.
+Personas are now configured via the `config.json` file located in the project's root directory. This external JSON file holds a dictionary under the "personas" key, where each key is a Discord `channel_id` (as a string), and its value is the system prompt for that channel. The `"default"` key provides a fallback persona if a specific channel ID is not found.
 
-Example:
-```python
-PERSONAS = {
+Example `config.json` structure (relevant section):
+```json
+{
+  "personas": {
     "default": "You are a helpful general-purpose AI assistant. Please respond concisely.",
     "1478120173071499264": "You are a cheerful and encouraging personal trainer AI named 'Coach'. Your goal is to help users achieve their fitness goals with positive reinforcement."
+  }
 }
 ```
-To customize or add new personas, modify this dictionary.
+If `config.json` or its "personas" section is not found or is invalid, the agent will gracefully fall back to a hardcoded default persona to ensure continuous operation. To customize or add new personas, modify this `config.json` file.
 
 ### Conversation History Limit
 
