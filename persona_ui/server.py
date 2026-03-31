@@ -2,6 +2,7 @@ import os
 import json
 from pathlib import Path
 
+import requests
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -10,11 +11,21 @@ import uvicorn
 current_dir = Path(__file__).parent
 config_path = current_dir.parent / "config.json"
 
+DISCORD_BOT_URL = "http://localhost:8000"
+
 app = FastAPI()
 
 app.mount("/static", StaticFiles(directory=current_dir), name="static")
 
 STATIC_DIR = current_dir
+
+
+def _reload_bot_schedules():
+    """Tell the Discord bot to reload schedules from config."""
+    try:
+        requests.post(f"{DISCORD_BOT_URL}/api/schedules/reload", timeout=5)
+    except Exception:
+        pass
 
 
 @app.get("/api/config")
@@ -48,6 +59,7 @@ async def update_persona(channel_id: str, persona_data: dict):
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
 
+    _reload_bot_schedules()
     return {"status": "updated", "persona": config["personas"][channel_id]}
 
 
@@ -74,6 +86,7 @@ async def create_persona(persona_data: dict):
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
 
+    _reload_bot_schedules()
     return {"status": "created", "persona": config["personas"][channel_id]}
 
 
@@ -99,6 +112,7 @@ async def delete_persona(channel_id: str):
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
 
+    _reload_bot_schedules()
     return {"status": "deleted"}
 
 
