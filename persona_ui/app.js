@@ -1,6 +1,8 @@
 const API_BASE = window.location.origin;
+const BOT_API_BASE = 'http://localhost:8000';
 
 let personas = {};
+let activeSchedules = [];
 
 const PERSONA_TRIGGERS = {
   default: [
@@ -11,30 +13,22 @@ const PERSONA_TRIGGERS = {
   trainer: [
     { category: 'Workout Logging', triggers: [
       { command: 'Log workout: Jump rope night', description: 'Log jump rope workout (Mon/Wed/Fri)' },
-      { command: 'Log workout: Body weight day, push-ups 4x10, planks 3x30sec', description: 'Log bodyweight workout (Tues/Thur/Sat)' },
+      { command: 'Log workout: Body weight day, push-ups 4x10', description: 'Log bodyweight workout (Tues/Thur/Sat)' },
       { command: 'Log workout: ... only did 20 sets', description: 'Log partial completion' }
     ]},
     { category: 'Workout Queries', triggers: [
       { command: 'How many workouts did I do this week?', description: 'Query workout count for time period' },
-      { command: 'How many jump rope workouts this month?', description: 'Query specific workout type' },
-      { command: 'Show my workout history', description: 'Get workout summary' }
+      { command: 'How many jump rope workouts this month?', description: 'Query specific workout type' }
     ]},
     { category: 'Workout Info', triggers: [
-      { command: "What's tonight's workout?", description: 'Get tonight workout type' },
-      { command: 'What type of workout is today?', description: 'Get today workout type' }
+      { command: "What's tonight's workout?", description: 'Get tonight workout type' }
     ]},
     { category: 'Health Logging', triggers: [
       { command: 'Log health: Weight: 75.5kg', description: 'Log body weight' },
-      { command: 'Log health: Walked 10000 steps', description: 'Log steps' },
-      { command: 'Log health: Slept 7.5 hours', description: 'Log sleep duration' }
-    ]},
-    { category: 'Health Queries', triggers: [
-      { command: 'How much did I walk this week?', description: 'Query walking data' },
-      { command: 'What is my weight today?', description: 'Query weight data' }
+      { command: 'Log health: Walked 10000 steps', description: 'Log steps' }
     ]},
     { category: 'Profile', triggers: [
-      { command: 'Set profile: Age: 30, Sex: Male, Height: 175cm', description: 'Create user profile' },
-      { command: 'Update profile: Activity: active', description: 'Update profile fields' }
+      { command: 'Set profile: Age: 30, Sex: Male, Height: 175cm', description: 'Create user profile' }
     ]}
   ],
   general_helper: [
@@ -54,13 +48,6 @@ const PERSONA_TRIGGERS = {
   ]
 };
 
-const COMMON_TRIGGERS = [
-  { category: 'Profile', triggers: [
-    { command: 'Set profile: Age: 30, Sex: Male, Height: 175cm', description: 'Create user profile' },
-    { command: 'Update profile: Age: 31', description: 'Update specific profile fields' }
-  ]}
-];
-
 const els = {
   select: document.getElementById('persona-select'),
   newBtn: document.getElementById('new-btn'),
@@ -73,12 +60,18 @@ const els = {
   name: document.getElementById('name'),
   description: document.getElementById('description'),
   prompt: document.getElementById('prompt'),
-  schedulingEnabled: document.getElementById('scheduling-enabled'),
-  schedulingPanel: document.getElementById('scheduling-panel'),
-  interval: document.getElementById('interval'),
-  startHour: document.getElementById('start-hour'),
-  endHour: document.getElementById('end-hour'),
-  messageContent: document.getElementById('message-content'),
+  schedulesList: document.getElementById('schedules-list'),
+  noSchedules: document.getElementById('no-schedules'),
+  addScheduleBtn: document.getElementById('add-schedule-btn'),
+  scheduleModal: document.getElementById('schedule-modal'),
+  scheduleForm: document.getElementById('schedule-form'),
+  scheduleModalTitle: document.getElementById('schedule-modal-title'),
+  editScheduleIndex: document.getElementById('edit-schedule-index'),
+  scheduleName: document.getElementById('schedule-name'),
+  scheduleInterval: document.getElementById('schedule-interval'),
+  scheduleStartHour: document.getElementById('schedule-start-hour'),
+  scheduleEndHour: document.getElementById('schedule-end-hour'),
+  scheduleMessage: document.getElementById('schedule-message'),
   cancelBtn: document.getElementById('cancel-btn'),
   deleteModal: document.getElementById('delete-modal'),
   deleteName: document.getElementById('delete-name'),
@@ -88,8 +81,10 @@ const els = {
   error: document.getElementById('error'),
   personaList: document.getElementById('persona-list'),
   triggersList: document.getElementById('triggers-list'),
+  reloadSchedulesBtn: document.getElementById('reload-schedules-btn'),
 };
 
+let currentSchedules = [];
 let deleteTargetId = null;
 
 async function loadConfig() {
@@ -98,10 +93,19 @@ async function loadConfig() {
   hideEditor();
 
   try {
-    const response = await fetch(`${API_BASE}/api/config`);
-    if (!response.ok) throw new Error('Failed to load config');
-    const config = await response.json();
+    const [configRes, schedulesRes] = await Promise.all([
+      fetch(`${API_BASE}/api/config`),
+      fetch(`${BOT_API_BASE}/api/schedules`).catch(() => ({ ok: false, json: () => ({}) }))
+    ]);
+
+    if (!configRes.ok) throw new Error('Failed to load config');
+    const config = await configRes.json();
     personas = config.personas || {};
+
+    if (schedulesRes.ok) {
+      activeSchedules = await schedulesRes.json();
+    }
+
     populateSelect();
     renderList();
   } catch (err) {
@@ -134,8 +138,8 @@ function renderList() {
     return a.localeCompare(b);
   });
   for (const [id, persona] of sorted) {
-    const scheduling = persona.proactive_scheduling;
-    const enabled = scheduling && scheduling.enabled;
+    const schedules = persona.proactive_scheduling || [];
+    const enabledCount = schedules.filter(s => s && s.enabled).length;
     const item = document.createElement('div');
     item.className = 'persona-item' + (id === 'default' ? ' is-default' : '');
     item.innerHTML = `
@@ -146,8 +150,8 @@ function renderList() {
         </div>
         <div class="persona-channel">${escapeHtml(id)}</div>
         <div class="persona-status">
-          <span class="dot ${enabled ? '' : 'disabled'}"></span>
-          <span>${enabled ? 'Check-ins enabled' : 'Check-ins disabled'}</span>
+          <span class="dot ${enabledCount > 0 ? '' : 'disabled'}"></span>
+          <span>${enabledCount} check-in${enabledCount !== 1 ? 's' : ''} enabled</span>
         </div>
       </div>
     `;
@@ -155,65 +159,41 @@ function renderList() {
   }
 }
 
-function showEditor(isNew = false) {
-  els.editor.classList.remove('hidden');
-  els.deleteBtn.classList.toggle('hidden', isNew);
-}
+function renderSchedules() {
+  els.schedulesList.innerHTML = '';
+  const hasSchedules = currentSchedules.length > 0;
+  els.noSchedules.classList.toggle('hidden', hasSchedules);
 
-function hideEditor() {
-  els.editor.classList.add('hidden');
-  els.select.value = '';
-}
-
-function startNew() {
-  els.isNew.value = 'true';
-  els.editorTitle.textContent = 'New Persona';
-  els.channelId.value = '';
-  els.channelId.disabled = false;
-  els.name.value = '';
-  els.description.value = '';
-  els.prompt.value = '';
-  els.schedulingEnabled.checked = false;
-  els.interval.value = '300';
-  els.startHour.value = '19';
-  els.endHour.value = '22';
-  els.messageContent.value = '';
-  updateSchedulingPanel();
-  renderTriggers('');
-  showEditor(true);
-}
-
-function startEdit(channelId) {
-  const persona = personas[channelId];
-  if (!persona) return;
-
-  const scheduling = persona.proactive_scheduling || {};
-
-  els.isNew.value = 'false';
-  els.editorTitle.textContent = 'Edit Persona';
-  els.channelId.value = channelId;
-  els.channelId.disabled = true;
-  els.name.value = persona.name || '';
-  els.description.value = persona.description || '';
-  els.prompt.value = persona.prompt || '';
-  els.schedulingEnabled.checked = scheduling.enabled || false;
-  els.interval.value = scheduling.interval_seconds || 300;
-  els.startHour.value = scheduling.time_window?.start_hour ?? 19;
-  els.endHour.value = scheduling.time_window?.end_hour ?? 22;
-  els.messageContent.value = scheduling.message_content || '';
-  updateSchedulingPanel();
-  renderTriggers(persona.name || '');
-  showEditor(true);
-}
-
-function updateSchedulingPanel() {
-  els.schedulingPanel.classList.toggle('hidden', !els.schedulingEnabled.checked);
+  currentSchedules.forEach((schedule, index) => {
+    const isActive = activeSchedules.some(s => s.job_id === `proactive_${schedule.id}`);
+    const item = document.createElement('div');
+    item.className = 'schedule-item';
+    item.innerHTML = `
+      <div class="schedule-item-header">
+        <span class="schedule-item-name">${escapeHtml(schedule.name || 'Unnamed')}</span>
+        <div class="schedule-item-status">
+          <span class="status-dot ${isActive ? '' : 'paused'}"></span>
+          <span>${isActive ? 'Active' : 'Paused'}</span>
+        </div>
+      </div>
+      <div class="schedule-item-details">
+        Every ${schedule.interval_seconds || 300}s | ${schedule.time_window?.start_hour ?? 0}:00 - ${schedule.time_window?.end_hour ?? 23}:00
+        ${schedule.message_content ? `<br>Message: ${escapeHtml(schedule.message_content.substring(0, 50))}...` : ''}
+      </div>
+      <div class="schedule-item-actions">
+        <button class="btn btn-secondary btn-small" onclick="editSchedule(${index})">Edit</button>
+        <button class="btn btn-secondary btn-small" onclick="toggleSchedule('${schedule.id}', ${!isActive})">${isActive ? 'Pause' : 'Resume'}</button>
+        <button class="btn btn-danger btn-small" onclick="deleteSchedule(${index})">Delete</button>
+      </div>
+    `;
+    els.schedulesList.appendChild(item);
+  });
 }
 
 function renderTriggers(personaName) {
   const name = (personaName || '').toLowerCase();
   let triggers = PERSONA_TRIGGERS.default;
-  
+
   if (name.includes('trainer') || name.includes('fitness') || name.includes('workout')) {
     triggers = PERSONA_TRIGGERS.trainer;
   } else if (name.includes('it') || name.includes('tech') || name.includes('helper')) {
@@ -235,6 +215,47 @@ function renderTriggers(personaName) {
   `).join('');
 }
 
+function showEditor(isNew = false) {
+  els.editor.classList.remove('hidden');
+  els.deleteBtn.classList.toggle('hidden', isNew);
+}
+
+function hideEditor() {
+  els.editor.classList.add('hidden');
+  els.select.value = '';
+}
+
+function startNew() {
+  els.isNew.value = 'true';
+  els.editorTitle.textContent = 'New Persona';
+  els.channelId.value = '';
+  els.channelId.disabled = false;
+  els.name.value = '';
+  els.description.value = '';
+  els.prompt.value = '';
+  currentSchedules = [];
+  renderSchedules();
+  renderTriggers('');
+  showEditor(true);
+}
+
+function startEdit(channelId) {
+  const persona = personas[channelId];
+  if (!persona) return;
+
+  els.isNew.value = 'false';
+  els.editorTitle.textContent = 'Edit Persona';
+  els.channelId.value = channelId;
+  els.channelId.disabled = true;
+  els.name.value = persona.name || '';
+  els.description.value = persona.description || '';
+  els.prompt.value = persona.prompt || '';
+  currentSchedules = persona.proactive_scheduling || [];
+  renderSchedules();
+  renderTriggers(persona.name || '');
+  showEditor(true);
+}
+
 function resetForm() {
   els.isNew.value = '';
   els.channelId.value = '';
@@ -242,12 +263,77 @@ function resetForm() {
   els.name.value = '';
   els.description.value = '';
   els.prompt.value = '';
-  els.schedulingEnabled.checked = false;
-  els.interval.value = '300';
-  els.startHour.value = '19';
-  els.endHour.value = '22';
-  els.messageContent.value = '';
+  currentSchedules = [];
   hideEditor();
+}
+
+function openScheduleModal(index = -1) {
+  const isEdit = index >= 0;
+  els.scheduleModalTitle.textContent = isEdit ? 'Edit Check-in' : 'Add Check-in';
+  els.editScheduleIndex.value = index;
+
+  if (isEdit) {
+    const schedule = currentSchedules[index];
+    els.scheduleName.value = schedule.name || '';
+    els.scheduleInterval.value = schedule.interval_seconds || 300;
+    els.scheduleStartHour.value = schedule.time_window?.start_hour ?? 18;
+    els.scheduleEndHour.value = schedule.time_window?.end_hour ?? 19;
+    els.scheduleMessage.value = schedule.message_content || '';
+  } else {
+    els.scheduleName.value = '';
+    els.scheduleInterval.value = 3600;
+    els.scheduleStartHour.value = 18;
+    els.scheduleEndHour.value = 19;
+    els.scheduleMessage.value = '';
+  }
+
+  els.scheduleModal.classList.remove('hidden');
+}
+
+function closeScheduleModal() {
+  els.scheduleModal.classList.add('hidden');
+}
+
+function editSchedule(index) {
+  openScheduleModal(index);
+}
+
+function deleteSchedule(index) {
+  if (confirm('Delete this check-in?')) {
+    currentSchedules.splice(index, 1);
+    renderSchedules();
+  }
+}
+
+async function toggleSchedule(scheduleId, enable) {
+  const jobId = `proactive_${scheduleId}`;
+  try {
+    const endpoint = enable ? 'resume' : 'pause';
+    const res = await fetch(`${BOT_API_BASE}/api/schedules/${jobId}/${endpoint}`, { method: 'POST' });
+    if (res.ok) {
+      showToast(enable ? 'Schedule resumed' : 'Schedule paused', 'success');
+      await loadConfig();
+      startEdit(els.channelId.value);
+    } else {
+      showToast('Failed to update schedule', 'error');
+    }
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  }
+}
+
+async function reloadSchedules() {
+  try {
+    const res = await fetch(`${BOT_API_BASE}/api/schedules/reload`, { method: 'POST' });
+    if (res.ok) {
+      showToast('Schedules reloaded', 'success');
+      await loadConfig();
+    } else {
+      showToast('Failed to reload schedules', 'error');
+    }
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+  }
 }
 
 // Event listeners
@@ -260,63 +346,34 @@ els.select.addEventListener('change', (e) => {
 });
 
 els.newBtn.addEventListener('click', startNew);
-
 els.cancelBtn.addEventListener('click', resetForm);
+els.addScheduleBtn.addEventListener('click', () => openScheduleModal());
+els.reloadSchedulesBtn.addEventListener('click', reloadSchedules);
 
-els.schedulingEnabled.addEventListener('change', updateSchedulingPanel);
-
-els.form.addEventListener('submit', async (e) => {
+els.scheduleForm.addEventListener('submit', (e) => {
   e.preventDefault();
+  const index = parseInt(els.editScheduleIndex.value);
 
-  const isNew = els.isNew.value === 'true';
-  const channelId = els.channelId.value.trim();
-
-  if (!channelId || !els.name.value.trim() || !els.prompt.value.trim()) {
-    showToast('Please fill in all required fields', 'error');
-    return;
-  }
-
-  const schedulingEnabled = els.schedulingEnabled.checked;
-  const proactive_scheduling = schedulingEnabled ? {
+  const schedule = {
+    id: index >= 0 ? (currentSchedules[index].id || generateId()) : generateId(),
+    name: els.scheduleName.value.trim(),
     enabled: true,
-    interval_seconds: parseInt(els.interval.value) || 300,
+    interval_seconds: parseInt(els.scheduleInterval.value) || 3600,
     time_window: {
-      start_hour: parseInt(els.startHour.value) || 19,
-      end_hour: parseInt(els.endHour.value) || 22
+      start_hour: parseInt(els.scheduleStartHour.value) || 18,
+      end_hour: parseInt(els.scheduleEndHour.value) || 19
     },
-    message_content: els.messageContent.value.trim() || null
-  } : null;
-
-  const personaData = {
-    name: els.name.value.trim(),
-    description: els.description.value.trim(),
-    prompt: els.prompt.value.trim(),
-    proactive_scheduling
+    message_content: els.scheduleMessage.value.trim() || null
   };
 
-  let response;
-  if (isNew) {
-    personaData.channel_id = channelId;
-    response = await fetch(`${API_BASE}/api/config/persona`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(personaData)
-    });
+  if (index >= 0) {
+    currentSchedules[index] = schedule;
   } else {
-    response = await fetch(`${API_BASE}/api/config/persona/${channelId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(personaData)
-    });
+    currentSchedules.push(schedule);
   }
 
-  if (response.ok) {
-    showToast(isNew ? 'Persona created' : 'Persona updated', 'success');
-    await loadConfig();
-  } else {
-    const error = await response.json();
-    showToast(error.error || 'Failed to save persona', 'error');
-  }
+  closeScheduleModal();
+  renderSchedules();
 });
 
 els.deleteBtn.addEventListener('click', () => {
@@ -349,6 +406,53 @@ els.confirmDelete.addEventListener('click', async () => {
     showToast(error.error || 'Failed to delete persona', 'error');
   }
 });
+
+els.form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  const isNew = els.isNew.value === 'true';
+  const channelId = els.channelId.value.trim();
+
+  if (!channelId || !els.name.value.trim() || !els.prompt.value.trim()) {
+    showToast('Please fill in all required fields', 'error');
+    return;
+  }
+
+  const personaData = {
+    name: els.name.value.trim(),
+    description: els.description.value.trim(),
+    prompt: els.prompt.value.trim(),
+    proactive_scheduling: currentSchedules
+  };
+
+  let response;
+  if (isNew) {
+    personaData.channel_id = channelId;
+    response = await fetch(`${API_BASE}/api/config/persona`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(personaData)
+    });
+  } else {
+    response = await fetch(`${API_BASE}/api/config/persona/${channelId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(personaData)
+    });
+  }
+
+  if (response.ok) {
+    showToast(isNew ? 'Persona created' : 'Persona updated', 'success');
+    await loadConfig();
+  } else {
+    const error = await response.json();
+    showToast(error.error || 'Failed to save persona', 'error');
+  }
+});
+
+function generateId() {
+  return 'schedule_' + Date.now().toString(36);
+}
 
 function showLoading(show) {
   els.loading.classList.toggle('hidden', !show);

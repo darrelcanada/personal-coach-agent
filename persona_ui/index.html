@@ -32,7 +32,7 @@
       <div id="editor" class="editor hidden">
         <div class="editor-header">
           <h2 id="editor-title">Edit Persona</h2>
-          <button id="delete-btn" class="btn btn-danger btn-small hidden">Delete</button>
+          <button id="delete-btn" class="btn btn-danger btn-small hidden">Delete Persona</button>
         </div>
 
         <form id="persona-form">
@@ -44,11 +44,9 @@
             <span class="hint">Discord channel ID for this persona</span>
           </div>
 
-          <div class="form-row">
-            <div class="form-group">
-              <label for="name">Name *</label>
-              <input type="text" id="name" placeholder="e.g., Trainer" required>
-            </div>
+          <div class="form-group">
+            <label for="name">Name *</label>
+            <input type="text" id="name" placeholder="e.g., Trainer" required>
           </div>
 
           <div class="form-group">
@@ -64,43 +62,10 @@
           <div class="section">
             <div class="section-header">
               <h3>Proactive Check-ins</h3>
-              <label class="toggle">
-                <input type="checkbox" id="scheduling-enabled">
-                <span class="toggle-slider"></span>
-              </label>
+              <button type="button" id="add-schedule-btn" class="btn btn-secondary btn-small">+ Add Check-in</button>
             </div>
-
-            <div id="scheduling-panel" class="scheduling-panel">
-              <div class="form-row">
-                <div class="form-group">
-                  <label for="interval">Check Interval</label>
-                  <div class="input-with-suffix">
-                    <input type="number" id="interval" min="60" value="300">
-                    <span class="suffix">seconds</span>
-                  </div>
-                </div>
-              </div>
-
-              <div class="form-row">
-                <div class="form-group">
-                  <label for="start-hour">Active Between</label>
-                  <div class="time-range">
-                    <input type="number" id="start-hour" min="0" max="23" value="19">
-                    <span>:</span>
-                    <span class="time-hint">00</span>
-                    <span>and</span>
-                    <input type="number" id="end-hour" min="0" max="23" value="22">
-                    <span>:</span>
-                    <span class="time-hint">00</span>
-                  </div>
-                </div>
-              </div>
-
-          <div class="form-group">
-            <label for="message-content">Check-in Prompt</label>
-            <textarea id="message-content" rows="2" placeholder="Custom prompt (leave empty for default)"></textarea>
-          </div>
-            </div>
+            <div id="schedules-list" class="schedules-list"></div>
+            <div id="no-schedules" class="no-items">No check-ins configured. Click "+ Add Check-in" to create one.</div>
           </div>
 
           <div class="section">
@@ -108,14 +73,14 @@
               <h3>Persona Triggers</h3>
             </div>
             <div id="triggers-panel" class="triggers-panel">
-              <p class="triggers-intro">Commands users can trigger in Discord. These are hardcoded in the agent.</p>
+              <p class="triggers-intro">Commands users can trigger in Discord.</p>
               <div id="triggers-list"></div>
             </div>
           </div>
 
           <div class="form-actions">
             <button type="button" id="cancel-btn" class="btn btn-secondary">Cancel</button>
-            <button type="submit" class="btn btn-primary">Save</button>
+            <button type="submit" class="btn btn-primary">Save Persona</button>
           </div>
         </form>
       </div>
@@ -124,13 +89,64 @@
     </main>
 
     <footer class="footer">
-      <p>Changes are saved to config.json. Restart the bot to apply changes.</p>
+      <p>Changes are saved to config.json. Restart the bot or click Reload Schedules to apply changes.</p>
+      <p><button id="reload-schedules-btn" class="btn btn-secondary btn-small">Reload Schedules</button></p>
     </footer>
+  </div>
+
+  <!-- Schedule Modal -->
+  <div id="schedule-modal" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="schedule-modal-title">Add Check-in</h2>
+        <button class="close-btn" onclick="closeScheduleModal()">&times;</button>
+      </div>
+      <form id="schedule-form">
+        <input type="hidden" id="edit-schedule-index">
+
+        <div class="form-group">
+          <label for="schedule-name">Name *</label>
+          <input type="text" id="schedule-name" placeholder="e.g., Workout Reminder" required>
+        </div>
+
+        <div class="form-group">
+          <label for="schedule-interval">Check Interval</label>
+          <div class="input-with-suffix">
+            <input type="number" id="schedule-interval" min="60" value="3600">
+            <span class="suffix">seconds</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="schedule-start-hour">Active Between</label>
+          <div class="time-range">
+            <input type="number" id="schedule-start-hour" min="0" max="23" value="18">
+            <span>:</span>
+            <span class="time-hint">00</span>
+            <span>and</span>
+            <input type="number" id="schedule-end-hour" min="0" max="23" value="19">
+            <span>:</span>
+            <span class="time-hint">00</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="schedule-message">Message Content</label>
+          <textarea id="schedule-message" rows="2" placeholder="Custom message or leave empty for default"></textarea>
+          <span class="hint">Use "WORKOUT_REMINDER" for automatic workout reminders</span>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeScheduleModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <!-- Delete Confirmation Modal -->
   <div id="delete-modal" class="modal hidden">
-    <div class="modal-content">
+    <div class="modal-content modal-small">
       <h2>Delete Persona?</h2>
       <p>Are you sure you want to delete <strong id="delete-name"></strong>?</p>
       <p class="warning">This action cannot be undone.</p>
