@@ -109,39 +109,56 @@ python bot.py  # Runs on http://0.0.0.0:8000
 
 ## Configuration
 
-All configuration is centralized in `config.json` in the project root:
+All configuration is centralized in `config.json` in the project root. The config is organized by persona, with proactive scheduling per-persona.
 
 ```json
 {
-  "discord_bot_url": "http://localhost:8000",
-  "db_connection_string": "sqlite:///memory.db",
-  "conversation_history_limit": 20,
-  "personas": {
-    "default": "You are a helpful general-purpose AI assistant.",
-    "CHANNEL_ID": "Your persona prompt here..."
+  "_meta": { "version": "1.0" },
+  "_database": {
+    "db_connection_string": "sqlite:///memory.db",
+    "conversation_history_limit": 20
   },
-  "discord_bot": {
+  "_discord": {
+    "bot_url": "http://localhost:8000",
     "agent_webhook_url": "http://localhost:8001/message",
     "langchain_agent_url": "http://localhost:8001"
   },
-  "proactive_scheduling": {
-    "trainer_checkin": {
-      "channel_id": 1478120173071499264,
-      "interval_seconds": 300,
-      "start_hour": 19,
-      "end_hour": 22,
-      "message_content": null
+  "personas": {
+    "default": {
+      "prompt": "You are a helpful general-purpose AI assistant."
+    },
+    "CHANNEL_ID": {
+      "name": "Persona Name",
+      "description": "What this persona does.",
+      "prompt": "Your persona prompt here...",
+      "proactive_scheduling": {
+        "enabled": true,
+        "interval_seconds": 300,
+        "time_window": { "start_hour": 19, "end_hour": 22 },
+        "message_content": null
+      }
     }
   }
 }
 ```
 
-### Proactive Scheduling
+### Config Sections
 
-Each schedule in `proactive_scheduling` supports:
-- **channel_id**: Discord channel to send messages to
-- **interval_seconds**: How often to check (not how often to send)
-- **start_hour/end_hour**: Optional time window (24-hour format)
+- **_meta**: Version and metadata
+- **_database**: Database connection and history limit
+- **_discord**: Discord bot and agent URLs
+- **personas**: Each persona keyed by Discord channel ID, with:
+  - **name**: Display name for logging
+  - **description**: Human-readable description
+  - **prompt**: System prompt for the LLM
+  - **proactive_scheduling**: Optional per-persona scheduling
+
+### Proactive Scheduling (per-persona)
+
+Each persona can have its own proactive schedule:
+- **enabled**: Set to `true` to enable
+- **interval_seconds**: How often to check (not frequency of messages)
+- **time_window**: Optional `{start_hour, end_hour}` to restrict to specific hours
 - **message_content**: Custom prompt or `null` for default check-in
 
 ## Usage

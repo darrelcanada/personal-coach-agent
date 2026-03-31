@@ -86,27 +86,32 @@ You should see output in your terminal indicating that the bot has connected suc
 
 ## Proactive Scheduling
 
-Proactive messages are configured in `config.json` (in the project root) under the `proactive_scheduling` section, not in `bot.py`. Each schedule can include:
+Proactive messages are configured per-persona in `config.json`. Each persona can have its own schedule:
 
-*   **channel_id**: The Discord channel to send messages to
-*   **interval_seconds**: How often to check if a message should be sent
-*   **start_hour** / **end_hour**: Optional time window (24-hour format) to restrict when messages are sent
-*   **message_content**: The prompt sent to the agent (or null for default check-in)
-
-Example configuration:
 ```json
-"proactive_scheduling": {
-  "trainer_checkin": {
-    "channel_id": 1478120173071499264,
-    "interval_seconds": 3000,
-    "start_hour": 19,
-    "end_hour": 22,
-    "message_content": null
+"personas": {
+  "CHANNEL_ID": {
+    "name": "Trainer",
+    "prompt": "You are a professional trainer...",
+    "proactive_scheduling": {
+      "enabled": true,
+      "interval_seconds": 300,
+      "time_window": {
+        "start_hour": 19,
+        "end_hour": 22
+      },
+      "message_content": null
+    }
   }
 }
 ```
 
-This example schedules the trainer check-in to only send messages between 19:00 and 22:00.
+### Settings
+
+*   **enabled**: Set to `true` to enable check-ins
+*   **interval_seconds**: How often to check (not frequency of messages)
+*   **time_window.start_hour/end_hour**: Restrict messages to specific hours (24-hour format)
+*   **message_content**: Custom prompt or `null` for default check-in
 
 **Important:** Ensure your `langchain_agent` is running for these proactive messages to be generated and sent successfully.
 
