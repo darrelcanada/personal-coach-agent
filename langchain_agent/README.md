@@ -60,7 +60,13 @@ To start the agent's server, run:
 ```bash
 venv/bin/python agent.py
 ```
-The agent will be running on `http://0.0.0.0:8001`. Ensure this URL is correctly configured as `AGENT_WEBHOOK_URL` and `LANGCHAIN_AGENT_URL` in your `discord_bot/.env` file.
+The agent will be running on `http://0.0.0.0:8001`. Ensure these URLs are correctly configured in `config.json` under `discord_bot`:
+```json
+"discord_bot": {
+  "agent_webhook_url": "http://localhost:8001/message",
+  "langchain_agent_url": "http://localhost:8001"
+}
+```
 
 ## Endpoints
 
@@ -73,9 +79,11 @@ The agent will be running on `http://0.0.0.0:8001`. Ensure this URL is correctly
     {
         "channel_id": "string",
         "author": "string",
+        "user_id": "string",
         "content": "string"
     }
     ```
+    *   `user_id` is required for health data logging and user profile management.
 
 ### 2. `/proactive_message`
 

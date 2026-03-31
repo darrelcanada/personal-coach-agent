@@ -8,6 +8,20 @@ This project implements a Discord bot that acts as a personal coach, leveraging 
 .
 ├── .gitignore
 ├── README.md               # This file
+├── AGENTS.md                # Agent/coding guidelines
+├── config.json              # Shared configuration (personas, scheduling, URLs)
+├── discord_bot/             # Discord bot application
+│   ├── bot.py               # Main bot + FastAPI server
+│   ├── requirements.txt     # Python dependencies
+│   └── .env                 # Environment variables (bot token only)
+└── langchain_agent/         # LangChain agent application
+    ├── agent.py             # Main agent + FastAPI server
+    ├── memory.db            # SQLite database (gitignored)
+    └── requirements.txt     # Python dependencies
+```
+.
+├── .gitignore
+├── README.md               # This file
 ├── discord_bot/            # Discord bot application
 │   ├── bot.py              # Main bot logic
 │   ├── requirements.txt    # Python dependencies for the bot
@@ -66,14 +80,14 @@ cd .. # Return to project root
 
 ### 3. Configure Environment Variables
 
-Create a `.env` file in the project's root directory (`personal-coach-agent/.env`). This file should contain your Discord bot token:
+Create a `.env` file in the `discord_bot` directory (`discord_bot/.env`). This file should contain your Discord bot token:
 
-#### `.env` (in project root)
+#### `discord_bot/.env`
 
 ```
 DISCORD_TOKEN="YOUR_DISCORD_BOT_TOKEN"
 ```
-Replace `YOUR_DISCORD_BOT_TOKEN` with your actual Discord bot token. Other configurations like agent URLs and proactive scheduling are now managed in `config.json`.
+Replace `YOUR_DISCORD_BOT_TOKEN` with your actual Discord bot token. Other configurations like agent URLs and proactive scheduling are managed in `config.json` (in the project root).
 
 ### 4. Invite the Discord Bot to Your Server
 
@@ -111,7 +125,7 @@ Once both components are running:
 
 *   **Chat with the Bot:** Send messages in your Discord channel. The bot will forward them to the `langchain_agent`, which will respond based on the persona configured for that channel.
 *   **Proactive Messages:** The Discord bot can schedule and send proactive messages from the LangChain agent to specific Discord channels. These are configured in the `"proactive_scheduling"` section of `config.json`.
-*   **Proactive Scheduling:** Adjust the `"proactive_scheduling"` section in `config.json` to define, change the frequency, or content of proactive messages.
+*   **Proactive Scheduling:** Adjust the `"proactive_scheduling"` section in `config.json` to define, change the frequency, content, or time windows for proactive messages. Use `start_hour` and `end_hour` to restrict messages to specific hours (e.g., 19:00-22:00).
 
 *   **Health Data Logging:** You can log your health data by sending messages to the bot starting with "Log health:". The agent will parse the message and store the data in an SQLite database.
 

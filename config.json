@@ -16,7 +16,9 @@
   "proactive_scheduling": {
     "trainer_checkin": {
       "channel_id": 1478120173071499264,
-      "interval_seconds": 3000,
+      "interval_seconds": 300,
+      "start_hour": 19,
+      "end_hour": 22,
       "message_content": "Generate a short, natural, and supportive check-in message for your client. Ask how they are feeling physically, check on their training progress, or suggest rest/recovery. Avoid being spammy or asking for a detailed log. Just an open-ended, encouraging check-in."
     }
   }

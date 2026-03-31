@@ -16,7 +16,9 @@ discord_bot/
 ├── venv/                 # Python virtual environment
 ├── bot.py                # Main application file containing bot logic, scheduler, and FastAPI server
 ├── requirements.txt      # Project dependencies
-└── .env                  # Environment variables (for bot token, agent URLs)
+└── .env                  # Environment variables (for bot token only)
+
+../config.json            # Shared configuration (personas, scheduling, URLs)
 ```
 
 ## Setup and Installation
@@ -58,15 +60,12 @@ pip install -r requirements.txt
 ### 4. Configure Environment Variables
 
 1.  Create a file named `.env` in the `discord_bot` directory.
-2.  Add your bot token and the LangChain agent URLs to this file:
+2.  Add your bot token to this file:
     ```
     DISCORD_TOKEN="YOUR_DISCORD_BOT_TOKEN"
-    AGENT_WEBHOOK_URL="http://localhost:8001/message" # URL for the langchain_agent's primary message endpoint
-    LANGCHAIN_AGENT_URL="http://localhost:8001"     # Base URL for the langchain_agent (used for proactive calls)
     ```
     *   Replace `YOUR_DISCORD_BOT_TOKEN` with the token you copied.
-    *   `AGENT_WEBHOOK_URL` is where user messages are forwarded to the LangChain agent.
-    *   `LANGCHAIN_AGENT_URL` is used by the bot to send proactive message requests to the LangChain agent. Ensure these URLs match where your `langchain_agent` is running.
+    *   The LangChain agent URLs are configured in `config.json` (in the project root), not in `.env`.
 
 ### 5. Invite the Bot to Your Server
 
@@ -85,13 +84,29 @@ venv/bin/python bot.py
 
 You should see output in your terminal indicating that the bot has connected successfully and that the scheduler has started. The bot's internal FastAPI server will run on `http://0.0.0.0:8000` in a separate thread, ensuring non-blocking operation for Discord events.
 
-## Proactive Trainer Check-in
+## Proactive Scheduling
 
-The bot is configured to proactively send check-in messages from the 'trainer' persona to a specific Discord channel. This is handled by a scheduled job (`send_proactive_trainer_message`) within the bot itself, using `APScheduler`.
+Proactive messages are configured in `config.json` (in the project root) under the `proactive_scheduling` section, not in `bot.py`. Each schedule can include:
 
-*   **Channel ID:** `1478120173071499264` (This is the pre-configured channel for the trainer persona in `bot.py`).
-*   **Frequency:** The proactive message is sent every 30 seconds (configured in `bot.py`).
-*   **Mechanism:** The bot's scheduler periodically calls the `langchain_agent`'s `/proactive_message` endpoint. The agent then generates a suitable message using its trainer persona and sends it back to the Discord channel via the bot's `/send_discord_message/` API endpoint.
+*   **channel_id**: The Discord channel to send messages to
+*   **interval_seconds**: How often to check if a message should be sent
+*   **start_hour** / **end_hour**: Optional time window (24-hour format) to restrict when messages are sent
+*   **message_content**: The prompt sent to the agent (or null for default check-in)
+
+Example configuration:
+```json
+"proactive_scheduling": {
+  "trainer_checkin": {
+    "channel_id": 1478120173071499264,
+    "interval_seconds": 3000,
+    "start_hour": 19,
+    "end_hour": 22,
+    "message_content": null
+  }
+}
+```
+
+This example schedules the trainer check-in to only send messages between 19:00 and 22:00.
 
 **Important:** Ensure your `langchain_agent` is running for these proactive messages to be generated and sent successfully.
 
