@@ -1,167 +1,213 @@
 const API_BASE = window.location.origin;
 
 let personas = {};
+
+const els = {
+  select: document.getElementById('persona-select'),
+  newBtn: document.getElementById('new-btn'),
+  editor: document.getElementById('editor'),
+  editorTitle: document.getElementById('editor-title'),
+  deleteBtn: document.getElementById('delete-btn'),
+  form: document.getElementById('persona-form'),
+  isNew: document.getElementById('is-new'),
+  channelId: document.getElementById('channel-id'),
+  name: document.getElementById('name'),
+  description: document.getElementById('description'),
+  prompt: document.getElementById('prompt'),
+  schedulingEnabled: document.getElementById('scheduling-enabled'),
+  schedulingPanel: document.getElementById('scheduling-panel'),
+  interval: document.getElementById('interval'),
+  startHour: document.getElementById('start-hour'),
+  endHour: document.getElementById('end-hour'),
+  messageContent: document.getElementById('message-content'),
+  cancelBtn: document.getElementById('cancel-btn'),
+  deleteModal: document.getElementById('delete-modal'),
+  deleteName: document.getElementById('delete-name'),
+  cancelDelete: document.getElementById('cancel-delete'),
+  confirmDelete: document.getElementById('confirm-delete'),
+  loading: document.getElementById('loading'),
+  error: document.getElementById('error'),
+  personaList: document.getElementById('persona-list'),
+};
+
 let deleteTargetId = null;
 
 async function loadConfig() {
   showLoading(true);
   hideError();
+  hideEditor();
 
   try {
     const response = await fetch(`${API_BASE}/api/config`);
     if (!response.ok) throw new Error('Failed to load config');
     const config = await response.json();
     personas = config.personas || {};
-    renderPersonas();
-  } catch (error) {
-    showError('Failed to load configuration: ' + error.message);
+    populateSelect();
+    renderList();
+  } catch (err) {
+    showError('Failed to load configuration: ' + err.message);
   } finally {
     showLoading(false);
   }
 }
 
-function renderPersonas() {
-  const container = document.getElementById('persona-list');
-  container.innerHTML = '';
-  container.classList.remove('hidden');
-
-  const channelIds = Object.keys(personas).sort((a, b) => {
+function populateSelect() {
+  els.select.innerHTML = '<option value="">-- Choose a persona --</option>';
+  const sorted = Object.entries(personas).sort(([a], [b]) => {
     if (a === 'default') return -1;
     if (b === 'default') return 1;
     return a.localeCompare(b);
   });
+  for (const [id, persona] of sorted) {
+    const opt = document.createElement('option');
+    opt.value = id;
+    opt.textContent = `${persona.name || 'Unnamed'} (${id})`;
+    els.select.appendChild(opt);
+  }
+}
 
-  channelIds.forEach(channelId => {
-    const persona = personas[channelId];
-    const isDefault = channelId === 'default';
+function renderList() {
+  els.personaList.innerHTML = '';
+  const sorted = Object.entries(personas).sort(([a], [b]) => {
+    if (a === 'default') return -1;
+    if (b === 'default') return 1;
+    return a.localeCompare(b);
+  });
+  for (const [id, persona] of sorted) {
     const scheduling = persona.proactive_scheduling;
-    const schedulingEnabled = scheduling && scheduling.enabled;
-
-    const card = document.createElement('div');
-    card.className = 'persona-card' + (isDefault ? ' is-default' : '');
-    card.innerHTML = `
-      <div class="persona-card-header">
-        <span class="persona-name">${escapeHtml(persona.name || 'Unnamed')}</span>
-      </div>
-      <div class="persona-channel-id">Channel: ${escapeHtml(channelId)}</div>
-      <p class="persona-description">${escapeHtml(persona.description || 'No description')}</p>
-      <div class="persona-status">
-        <span class="status-dot ${schedulingEnabled ? '' : 'disabled'}"></span>
-        <span>${schedulingEnabled ? 'Check-ins enabled' : 'Check-ins disabled'}</span>
-      </div>
-      <div class="persona-actions">
-        <button class="btn btn-primary btn-small" onclick="editPersona('${channelId}')">Edit</button>
-        ${!isDefault ? `<button class="btn btn-danger btn-small" onclick="confirmDelete('${channelId}')">Delete</button>` : ''}
+    const enabled = scheduling && scheduling.enabled;
+    const item = document.createElement('div');
+    item.className = 'persona-item' + (id === 'default' ? ' is-default' : '');
+    item.innerHTML = `
+      <div class="persona-info">
+        <div class="persona-name">
+          ${escapeHtml(persona.name || 'Unnamed')}
+          ${id === 'default' ? '<span class="default-badge">Default</span>' : ''}
+        </div>
+        <div class="persona-channel">${escapeHtml(id)}</div>
+        <div class="persona-status">
+          <span class="dot ${enabled ? '' : 'disabled'}"></span>
+          <span>${enabled ? 'Check-ins enabled' : 'Check-ins disabled'}</span>
+        </div>
       </div>
     `;
-    container.appendChild(card);
-  });
+    els.personaList.appendChild(item);
+  }
 }
 
-function openEditModal(isNew = false) {
-  const modal = document.getElementById('edit-modal');
-  const title = document.getElementById('modal-title');
-  const channelInput = document.getElementById('channel-id-input');
-
-  title.textContent = isNew ? 'Add New Persona' : 'Edit Persona';
-  channelInput.disabled = !isNew;
-
-  document.getElementById('edit-channel-id').value = '';
-  channelInput.value = '';
-  document.getElementById('name-input').value = '';
-  document.getElementById('description-input').value = '';
-  document.getElementById('prompt-input').value = '';
-  document.getElementById('scheduling-enabled').checked = false;
-  document.getElementById('interval-input').value = '300';
-  document.getElementById('start-hour-input').value = '19';
-  document.getElementById('end-hour-input').value = '22';
-  document.getElementById('message-content-input').value = '';
-
-  updateSchedulingOptions();
-  modal.classList.remove('hidden');
+function showEditor(isNew = false) {
+  els.editor.classList.remove('hidden');
+  els.deleteBtn.classList.toggle('hidden', isNew);
 }
 
-function closeEditModal() {
-  document.getElementById('edit-modal').classList.add('hidden');
+function hideEditor() {
+  els.editor.classList.add('hidden');
+  els.select.value = '';
 }
 
-function editPersona(channelId) {
+function startNew() {
+  els.isNew.value = 'true';
+  els.editorTitle.textContent = 'New Persona';
+  els.channelId.value = '';
+  els.channelId.disabled = false;
+  els.name.value = '';
+  els.description.value = '';
+  els.prompt.value = '';
+  els.schedulingEnabled.checked = false;
+  els.interval.value = '300';
+  els.startHour.value = '19';
+  els.endHour.value = '22';
+  els.messageContent.value = '';
+  updateSchedulingPanel();
+  showEditor(true);
+}
+
+function startEdit(channelId) {
   const persona = personas[channelId];
+  if (!persona) return;
+
   const scheduling = persona.proactive_scheduling || {};
 
-  document.getElementById('edit-channel-id').value = channelId;
-  document.getElementById('channel-id-input').value = channelId;
-  document.getElementById('channel-id-input').disabled = true;
-  document.getElementById('name-input').value = persona.name || '';
-  document.getElementById('description-input').value = persona.description || '';
-  document.getElementById('prompt-input').value = persona.prompt || '';
-
-  const enabled = scheduling.enabled || false;
-  document.getElementById('scheduling-enabled').checked = enabled;
-  document.getElementById('interval-input').value = scheduling.interval_seconds || 300;
-  document.getElementById('start-hour-input').value = scheduling.time_window?.start_hour ?? 19;
-  document.getElementById('end-hour-input').value = scheduling.time_window?.end_hour ?? 22;
-  document.getElementById('message-content-input').value = scheduling.message_content || '';
-
-  updateSchedulingOptions();
-  document.getElementById('modal-title').textContent = 'Edit Persona';
-  document.getElementById('edit-modal').classList.remove('hidden');
+  els.isNew.value = 'false';
+  els.editorTitle.textContent = 'Edit Persona';
+  els.channelId.value = channelId;
+  els.channelId.disabled = true;
+  els.name.value = persona.name || '';
+  els.description.value = persona.description || '';
+  els.prompt.value = persona.prompt || '';
+  els.schedulingEnabled.checked = scheduling.enabled || false;
+  els.interval.value = scheduling.interval_seconds || 300;
+  els.startHour.value = scheduling.time_window?.start_hour ?? 19;
+  els.endHour.value = scheduling.time_window?.end_hour ?? 22;
+  els.messageContent.value = scheduling.message_content || '';
+  updateSchedulingPanel();
+  showEditor(true);
 }
 
-function updateSchedulingOptions() {
-  const enabled = document.getElementById('scheduling-enabled').checked;
-  const options = document.getElementById('scheduling-options');
-  options.classList.toggle('hidden', !enabled);
+function updateSchedulingPanel() {
+  els.schedulingPanel.classList.toggle('hidden', !els.schedulingEnabled.checked);
 }
 
-function confirmDelete(channelId) {
-  deleteTargetId = channelId;
-  document.getElementById('delete-persona-name').textContent = personas[channelId]?.name || channelId;
-  document.getElementById('delete-modal').classList.remove('hidden');
+function resetForm() {
+  els.isNew.value = '';
+  els.channelId.value = '';
+  els.channelId.disabled = false;
+  els.name.value = '';
+  els.description.value = '';
+  els.prompt.value = '';
+  els.schedulingEnabled.checked = false;
+  els.interval.value = '300';
+  els.startHour.value = '19';
+  els.endHour.value = '22';
+  els.messageContent.value = '';
+  hideEditor();
 }
 
-function closeDeleteModal() {
-  deleteTargetId = null;
-  document.getElementById('delete-modal').classList.add('hidden');
-}
+// Event listeners
+els.select.addEventListener('change', (e) => {
+  if (e.target.value) {
+    startEdit(e.target.value);
+  } else {
+    resetForm();
+  }
+});
 
-document.getElementById('scheduling-enabled').addEventListener('change', updateSchedulingOptions);
+els.newBtn.addEventListener('click', startNew);
 
-document.getElementById('persona-form').addEventListener('submit', async (e) => {
+els.cancelBtn.addEventListener('click', resetForm);
+
+els.schedulingEnabled.addEventListener('change', updateSchedulingPanel);
+
+els.form.addEventListener('submit', async (e) => {
   e.preventDefault();
 
-  const editChannelId = document.getElementById('edit-channel-id').value;
-  const channelId = document.getElementById('channel-id-input').value.trim();
-  const name = document.getElementById('name-input').value.trim();
-  const description = document.getElementById('description-input').value.trim();
-  const prompt = document.getElementById('prompt-input').value.trim();
+  const isNew = els.isNew.value === 'true';
+  const channelId = els.channelId.value.trim();
 
-  if (!channelId || !name || !prompt) {
+  if (!channelId || !els.name.value.trim() || !els.prompt.value.trim()) {
     showToast('Please fill in all required fields', 'error');
     return;
   }
 
-  const schedulingEnabled = document.getElementById('scheduling-enabled').checked;
+  const schedulingEnabled = els.schedulingEnabled.checked;
   const proactive_scheduling = schedulingEnabled ? {
     enabled: true,
-    interval_seconds: parseInt(document.getElementById('interval-input').value) || 300,
+    interval_seconds: parseInt(els.interval.value) || 300,
     time_window: {
-      start_hour: parseInt(document.getElementById('start-hour-input').value) || 19,
-      end_hour: parseInt(document.getElementById('end-hour-input').value) || 22
+      start_hour: parseInt(els.startHour.value) || 19,
+      end_hour: parseInt(els.endHour.value) || 22
     },
-    message_content: document.getElementById('message-content-input').value.trim() || null
+    message_content: els.messageContent.value.trim() || null
   } : null;
 
   const personaData = {
-    name,
-    description,
-    prompt,
+    name: els.name.value.trim(),
+    description: els.description.value.trim(),
+    prompt: els.prompt.value.trim(),
     proactive_scheduling
   };
 
   let response;
-  let isNew = !editChannelId;
-
   if (isNew) {
     personaData.channel_id = channelId;
     response = await fetch(`${API_BASE}/api/config/persona`, {
@@ -170,7 +216,7 @@ document.getElementById('persona-form').addEventListener('submit', async (e) => 
       body: JSON.stringify(personaData)
     });
   } else {
-    response = await fetch(`${API_BASE}/api/config/persona/${editChannelId}`, {
+    response = await fetch(`${API_BASE}/api/config/persona/${channelId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(personaData)
@@ -178,16 +224,28 @@ document.getElementById('persona-form').addEventListener('submit', async (e) => 
   }
 
   if (response.ok) {
-    closeEditModal();
     showToast(isNew ? 'Persona created' : 'Persona updated', 'success');
-    loadConfig();
+    await loadConfig();
   } else {
     const error = await response.json();
     showToast(error.error || 'Failed to save persona', 'error');
   }
 });
 
-document.getElementById('confirm-delete-btn').addEventListener('click', async () => {
+els.deleteBtn.addEventListener('click', () => {
+  const channelId = els.channelId.value;
+  if (!channelId) return;
+  deleteTargetId = channelId;
+  els.deleteName.textContent = personas[channelId]?.name || channelId;
+  els.deleteModal.classList.remove('hidden');
+});
+
+els.cancelDelete.addEventListener('click', () => {
+  deleteTargetId = null;
+  els.deleteModal.classList.add('hidden');
+});
+
+els.confirmDelete.addEventListener('click', async () => {
   if (!deleteTargetId) return;
 
   const response = await fetch(`${API_BASE}/api/config/persona/${deleteTargetId}`, {
@@ -195,38 +253,36 @@ document.getElementById('confirm-delete-btn').addEventListener('click', async ()
   });
 
   if (response.ok) {
-    closeDeleteModal();
+    els.deleteModal.classList.add('hidden');
     showToast('Persona deleted', 'success');
-    loadConfig();
+    deleteTargetId = null;
+    await loadConfig();
   } else {
     const error = await response.json();
     showToast(error.error || 'Failed to delete persona', 'error');
   }
 });
 
-document.getElementById('add-persona-btn').addEventListener('click', () => openEditModal(true));
-
 function showLoading(show) {
-  document.getElementById('loading').classList.toggle('hidden', !show);
+  els.loading.classList.toggle('hidden', !show);
 }
 
-function showError(message) {
-  const el = document.getElementById('error');
-  el.textContent = message;
-  el.classList.remove('hidden');
+function showError(msg) {
+  els.error.textContent = msg;
+  els.error.classList.remove('hidden');
 }
 
 function hideError() {
-  document.getElementById('error').classList.add('hidden');
+  els.error.classList.add('hidden');
 }
 
-function showToast(message, type = 'success') {
+function showToast(msg, type = 'success') {
   const existing = document.querySelector('.toast');
   if (existing) existing.remove();
 
   const toast = document.createElement('div');
   toast.className = `toast ${type}`;
-  toast.textContent = message;
+  toast.textContent = msg;
   document.body.appendChild(toast);
 
   setTimeout(() => toast.remove(), 3000);

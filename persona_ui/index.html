@@ -3,113 +3,130 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Persona Configuration</title>
+  <title>Persona Manager</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>Persona Configuration</h1>
-      <p class="subtitle">Configure AI personas for Discord channels</p>
+  <div class="app">
+    <header class="header">
+      <div class="header-content">
+        <h1>Persona Manager</h1>
+        <p class="subtitle">Configure AI personas for your Discord bot</p>
+      </div>
     </header>
 
-    <div id="loading" class="loading">Loading...</div>
-    <div id="error" class="error hidden"></div>
-
-    <div id="persona-list" class="persona-grid hidden"></div>
-
-    <div class="actions">
-      <button id="add-persona-btn" class="btn btn-primary">+ Add New Persona</button>
-    </div>
-  </div>
-
-  <!-- Edit Modal -->
-  <div id="edit-modal" class="modal hidden">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2 id="modal-title">Edit Persona</h2>
-        <button class="close-btn" onclick="closeEditModal()">&times;</button>
+    <main class="main">
+      <div class="toolbar">
+        <div class="select-group">
+          <label for="persona-select">Select Persona:</label>
+          <select id="persona-select">
+            <option value="">-- Choose a persona --</option>
+          </select>
+          <button id="new-btn" class="btn btn-primary">+ New</button>
+        </div>
       </div>
-      <form id="persona-form">
-        <input type="hidden" id="edit-channel-id">
 
-        <div class="form-group">
-          <label for="channel-id-input">Channel ID</label>
-          <input type="text" id="channel-id-input" placeholder="e.g., 1478120173071499264" required>
-          <small>Discord channel ID (read-only when editing)</small>
+      <div id="loading" class="loading hidden">Loading...</div>
+      <div id="error" class="error hidden"></div>
+
+      <div id="editor" class="editor hidden">
+        <div class="editor-header">
+          <h2 id="editor-title">Edit Persona</h2>
+          <button id="delete-btn" class="btn btn-danger btn-small hidden">Delete</button>
         </div>
 
-        <div class="form-group">
-          <label for="name-input">Name</label>
-          <input type="text" id="name-input" placeholder="e.g., Trainer" required>
-        </div>
+        <form id="persona-form">
+          <input type="hidden" id="is-new">
 
-        <div class="form-group">
-          <label for="description-input">Description</label>
-          <textarea id="description-input" rows="2" placeholder="Brief description of this persona"></textarea>
-        </div>
+          <div class="form-group">
+            <label for="channel-id">Channel ID *</label>
+            <input type="text" id="channel-id" placeholder="e.g., 1478120173071499264" required>
+            <span class="hint">Discord channel ID for this persona</span>
+          </div>
 
-        <div class="form-group">
-          <label for="prompt-input">System Prompt</label>
-          <textarea id="prompt-input" rows="6" placeholder="You are a helpful assistant..." required></textarea>
-        </div>
-
-        <div class="form-section">
-          <h3>Proactive Scheduling</h3>
-          <label class="checkbox-label">
-            <input type="checkbox" id="scheduling-enabled">
-            <span>Enable proactive check-ins</span>
-          </label>
-
-          <div id="scheduling-options" class="scheduling-options">
-            <div class="form-row">
-              <div class="form-group">
-                <label for="interval-input">Check Interval (seconds)</label>
-                <input type="number" id="interval-input" min="60" value="300">
-              </div>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label for="start-hour-input">Start Hour</label>
-                <input type="number" id="start-hour-input" min="0" max="23" value="19">
-                <small>0-23</small>
-              </div>
-              <div class="form-group">
-                <label for="end-hour-input">End Hour</label>
-                <input type="number" id="end-hour-input" min="0" max="23" value="22">
-                <small>0-23</small>
-              </div>
-            </div>
-
+          <div class="form-row">
             <div class="form-group">
-              <label for="message-content-input">Check-in Prompt</label>
-              <textarea id="message-content-input" rows="2" placeholder="Custom prompt or leave empty for default"></textarea>
-              <small>Leave empty for default check-in message</small>
+              <label for="name">Name *</label>
+              <input type="text" id="name" placeholder="e.g., Trainer" required>
             </div>
           </div>
-        </div>
 
-        <div class="form-actions">
-          <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save</button>
-        </div>
-      </form>
-    </div>
+          <div class="form-group">
+            <label for="description">Description</label>
+            <input type="text" id="description" placeholder="Brief description of this persona">
+          </div>
+
+          <div class="form-group">
+            <label for="prompt">System Prompt *</label>
+            <textarea id="prompt" rows="5" placeholder="You are a helpful assistant..." required></textarea>
+          </div>
+
+          <div class="section">
+            <div class="section-header">
+              <h3>Proactive Check-ins</h3>
+              <label class="toggle">
+                <input type="checkbox" id="scheduling-enabled">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div id="scheduling-panel" class="scheduling-panel">
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="interval">Check Interval</label>
+                  <div class="input-with-suffix">
+                    <input type="number" id="interval" min="60" value="300">
+                    <span class="suffix">seconds</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="start-hour">Active Between</label>
+                  <div class="time-range">
+                    <input type="number" id="start-hour" min="0" max="23" value="19">
+                    <span>:</span>
+                    <span class="time-hint">00</span>
+                    <span>and</span>
+                    <input type="number" id="end-hour" min="0" max="23" value="22">
+                    <span>:</span>
+                    <span class="time-hint">00</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="message-content">Check-in Prompt</label>
+                <textarea id="message-content" rows="2" placeholder="Custom prompt (leave empty for default)"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="button" id="cancel-btn" class="btn btn-secondary">Cancel</button>
+            <button type="submit" class="btn btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+
+      <div id="persona-list" class="persona-list"></div>
+    </main>
+
+    <footer class="footer">
+      <p>Changes are saved to config.json. Restart the bot to apply changes.</p>
+    </footer>
   </div>
 
   <!-- Delete Confirmation Modal -->
   <div id="delete-modal" class="modal hidden">
-    <div class="modal-content modal-small">
-      <div class="modal-header">
-        <h2>Delete Persona</h2>
-        <button class="close-btn" onclick="closeDeleteModal()">&times;</button>
-      </div>
-      <p>Are you sure you want to delete <strong id="delete-persona-name"></strong>?</p>
+    <div class="modal-content">
+      <h2>Delete Persona?</h2>
+      <p>Are you sure you want to delete <strong id="delete-name"></strong>?</p>
       <p class="warning">This action cannot be undone.</p>
-      <div class="form-actions">
-        <button type="button" class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
-        <button type="button" class="btn btn-danger" id="confirm-delete-btn">Delete</button>
+      <div class="modal-actions">
+        <button id="cancel-delete" class="btn btn-secondary">Cancel</button>
+        <button id="confirm-delete" class="btn btn-danger">Delete</button>
       </div>
     </div>
   </div>
