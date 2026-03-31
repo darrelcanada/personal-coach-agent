@@ -45,6 +45,17 @@
             "end_hour": 19
           },
           "message_content": "WORKOUT_REMINDER"
+        },
+        {
+          "id": "schedule_mnf1yvgb",
+          "name": "You can do Hard Things.",
+          "enabled": true,
+          "interval_seconds": 3600,
+          "time_window": {
+            "start_hour": 21,
+            "end_hour": 22
+          },
+          "message_content": "Explain to the user that they have the ability to do hard things.  Do not lose focus on the goals and do no get overwhelmed by little things."
         }
       ]
     },

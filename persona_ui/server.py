@@ -20,17 +20,8 @@ app.mount("/static", StaticFiles(directory=current_dir), name="static")
 STATIC_DIR = current_dir
 
 
-def _reload_bot_schedules():
-    """Tell the Discord bot to reload schedules from config."""
-    try:
-        requests.post(f"{DISCORD_BOT_URL}/api/schedules/reload", timeout=5)
-    except Exception:
-        pass
-
-
 @app.get("/api/config")
 async def get_config():
-    """Read and return the current config.json"""
     try:
         with open(config_path, "r") as f:
             return json.load(f)
@@ -40,9 +31,27 @@ async def get_config():
         return {"error": "config.json is not valid JSON"}, 500
 
 
+@app.post("/api/config/reload")
+async def reload_bot_schedules():
+    try:
+        response = requests.post(f"{DISCORD_BOT_URL}/api/schedules/reload", timeout=5)
+        if response.ok:
+            return {"status": "reloaded", "message": "Bot schedules reloaded"}
+        return {
+            "status": "error",
+            "message": f"Bot returned: {response.status_code}",
+        }, 500
+    except requests.exceptions.ConnectionError:
+        return {
+            "status": "error",
+            "message": "Cannot connect to bot. Is it running?",
+        }, 503
+    except Exception as e:
+        return {"status": "error", "message": str(e)}, 500
+
+
 @app.put("/api/config/persona/{channel_id}")
 async def update_persona(channel_id: str, persona_data: dict):
-    """Update an existing persona"""
     try:
         with open(config_path, "r") as f:
             config = json.load(f)
@@ -59,13 +68,11 @@ async def update_persona(channel_id: str, persona_data: dict):
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
 
-    _reload_bot_schedules()
     return {"status": "updated", "persona": config["personas"][channel_id]}
 
 
 @app.post("/api/config/persona")
 async def create_persona(persona_data: dict):
-    """Create a new persona"""
     channel_id = persona_data.get("channel_id")
     if not channel_id:
         return {"error": "channel_id is required"}, 400
@@ -86,13 +93,11 @@ async def create_persona(persona_data: dict):
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
 
-    _reload_bot_schedules()
     return {"status": "created", "persona": config["personas"][channel_id]}
 
 
 @app.delete("/api/config/persona/{channel_id}")
 async def delete_persona(channel_id: str):
-    """Delete a persona"""
     try:
         with open(config_path, "r") as f:
             config = json.load(f)
@@ -112,13 +117,11 @@ async def delete_persona(channel_id: str):
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
 
-    _reload_bot_schedules()
     return {"status": "deleted"}
 
 
 @app.get("/")
 async def root():
-    """Serve the main UI"""
     return FileResponse(STATIC_DIR / "index.html")
 
 

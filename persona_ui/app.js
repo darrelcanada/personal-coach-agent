@@ -337,16 +337,25 @@ async function toggleSchedule(scheduleId, enable) {
 }
 
 async function reloadSchedules() {
+  await reloadBotAndRefresh();
+}
+
+async function reloadBotAndRefresh() {
   try {
-    const res = await fetch(`${BOT_API_BASE}/api/schedules/reload`, { method: 'POST' });
-    if (res.ok) {
+    const res = await fetch(`${API_BASE}/api/config/reload`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok && data.status === 'reloaded') {
       showToast('Schedules reloaded', 'success');
-      await loadConfig();
     } else {
-      showToast('Failed to reload schedules', 'error');
+      showToast(data.message || 'Failed to reload bot schedules', 'error');
+    }
+    await loadConfig();
+    const channelId = els.channelId.value;
+    if (channelId) {
+      await startEdit(channelId);
     }
   } catch (err) {
-    showToast('Error: ' + err.message, 'error');
+    showToast('Cannot connect to bot. Is it running?', 'error');
   }
 }
 
@@ -457,7 +466,7 @@ els.form.addEventListener('submit', async (e) => {
 
   if (response.ok) {
     showToast(isNew ? 'Persona created' : 'Persona updated', 'success');
-    await loadConfig();
+    await reloadBotAndRefresh();
   } else {
     const error = await response.json();
     showToast(error.error || 'Failed to save persona', 'error');
