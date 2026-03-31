@@ -5,6 +5,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import threading
 import asyncio
@@ -40,6 +41,14 @@ bot = discord.Client(intents=intents)
 scheduler = AsyncIOScheduler()
 schedule_registry = {}
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def _is_within_time_window(start_hour: int | None, end_hour: int | None) -> bool:
