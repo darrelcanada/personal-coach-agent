@@ -312,6 +312,7 @@ async function toggleSchedule(scheduleId, enable) {
     const res = await fetch(`${BOT_API_BASE}/api/schedules/${jobId}/${endpoint}`, { method: 'POST' });
     if (res.ok) {
       showToast(enable ? 'Schedule resumed' : 'Schedule paused', 'success');
+      await new Promise(r => setTimeout(r, 600));
       await loadConfig();
       startEdit(els.channelId.value);
     } else {

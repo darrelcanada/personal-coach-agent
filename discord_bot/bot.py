@@ -139,7 +139,7 @@ async def get_schedules():
     schedules = []
     for job_id, schedule in schedule_registry.items():
         job = scheduler.get_job(job_id)
-        is_running = job is not None and not job.next_run_time is None
+        is_active = job is not None
         schedules.append(
             {
                 "job_id": job_id,
@@ -150,7 +150,7 @@ async def get_schedules():
                 "start_hour": schedule["start_hour"],
                 "end_hour": schedule["end_hour"],
                 "enabled": schedule["enabled"],
-                "is_active": is_running,
+                "is_active": is_active,
             }
         )
     return schedules
@@ -169,6 +169,7 @@ async def pause_schedule(job_id: str):
 async def resume_schedule(job_id: str):
     try:
         scheduler.resume_job(job_id)
+        await asyncio.sleep(0.5)
         return {"status": "resumed", "job_id": job_id}
     except Exception as e:
         return {"error": str(e)}, 400
