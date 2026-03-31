@@ -2,6 +2,65 @@ const API_BASE = window.location.origin;
 
 let personas = {};
 
+const PERSONA_TRIGGERS = {
+  default: [
+    { category: 'General', triggers: [
+      { command: 'Any message', description: 'Responds using the LLM with the persona prompt' }
+    ]}
+  ],
+  trainer: [
+    { category: 'Workout Logging', triggers: [
+      { command: 'Log workout: Jump rope night', description: 'Log jump rope workout (Mon/Wed/Fri)' },
+      { command: 'Log workout: Body weight day, push-ups 4x10, planks 3x30sec', description: 'Log bodyweight workout (Tues/Thur/Sat)' },
+      { command: 'Log workout: ... only did 20 sets', description: 'Log partial completion' }
+    ]},
+    { category: 'Workout Queries', triggers: [
+      { command: 'How many workouts did I do this week?', description: 'Query workout count for time period' },
+      { command: 'How many jump rope workouts this month?', description: 'Query specific workout type' },
+      { command: 'Show my workout history', description: 'Get workout summary' }
+    ]},
+    { category: 'Workout Info', triggers: [
+      { command: "What's tonight's workout?", description: 'Get tonight workout type' },
+      { command: 'What type of workout is today?', description: 'Get today workout type' }
+    ]},
+    { category: 'Health Logging', triggers: [
+      { command: 'Log health: Weight: 75.5kg', description: 'Log body weight' },
+      { command: 'Log health: Walked 10000 steps', description: 'Log steps' },
+      { command: 'Log health: Slept 7.5 hours', description: 'Log sleep duration' }
+    ]},
+    { category: 'Health Queries', triggers: [
+      { command: 'How much did I walk this week?', description: 'Query walking data' },
+      { command: 'What is my weight today?', description: 'Query weight data' }
+    ]},
+    { category: 'Profile', triggers: [
+      { command: 'Set profile: Age: 30, Sex: Male, Height: 175cm', description: 'Create user profile' },
+      { command: 'Update profile: Activity: active', description: 'Update profile fields' }
+    ]}
+  ],
+  general_helper: [
+    { category: 'General', triggers: [
+      { command: 'Any message', description: 'Responds using the LLM with IT/tech persona' }
+    ]}
+  ],
+  math_tutor: [
+    { category: 'General', triggers: [
+      { command: 'Any math question', description: 'Responds using the LLM with math tutor persona' }
+    ]}
+  ],
+  icelandic_teacher: [
+    { category: 'General', triggers: [
+      { command: 'Any message', description: 'Responds using the LLM with Icelandic teacher persona' }
+    ]}
+  ]
+};
+
+const COMMON_TRIGGERS = [
+  { category: 'Profile', triggers: [
+    { command: 'Set profile: Age: 30, Sex: Male, Height: 175cm', description: 'Create user profile' },
+    { command: 'Update profile: Age: 31', description: 'Update specific profile fields' }
+  ]}
+];
+
 const els = {
   select: document.getElementById('persona-select'),
   newBtn: document.getElementById('new-btn'),
@@ -28,6 +87,7 @@ const els = {
   loading: document.getElementById('loading'),
   error: document.getElementById('error'),
   personaList: document.getElementById('persona-list'),
+  triggersList: document.getElementById('triggers-list'),
 };
 
 let deleteTargetId = null;
@@ -119,6 +179,7 @@ function startNew() {
   els.endHour.value = '22';
   els.messageContent.value = '';
   updateSchedulingPanel();
+  renderTriggers('');
   showEditor(true);
 }
 
@@ -141,11 +202,37 @@ function startEdit(channelId) {
   els.endHour.value = scheduling.time_window?.end_hour ?? 22;
   els.messageContent.value = scheduling.message_content || '';
   updateSchedulingPanel();
+  renderTriggers(persona.name || '');
   showEditor(true);
 }
 
 function updateSchedulingPanel() {
   els.schedulingPanel.classList.toggle('hidden', !els.schedulingEnabled.checked);
+}
+
+function renderTriggers(personaName) {
+  const name = (personaName || '').toLowerCase();
+  let triggers = PERSONA_TRIGGERS.default;
+  
+  if (name.includes('trainer') || name.includes('fitness') || name.includes('workout')) {
+    triggers = PERSONA_TRIGGERS.trainer;
+  } else if (name.includes('it') || name.includes('tech') || name.includes('helper')) {
+    triggers = PERSONA_TRIGGERS.general_helper;
+  } else if (name.includes('math') || name.includes('tutor')) {
+    triggers = PERSONA_TRIGGERS.math_tutor;
+  } else if (name.includes('icelandic') || name.includes('language') || name.includes('teacher')) {
+    triggers = PERSONA_TRIGGERS.icelandic_teacher;
+  }
+
+  els.triggersList.innerHTML = triggers.map(category => `
+    <div class="trigger-category">${category.category}</div>
+    ${category.triggers.map(t => `
+      <div class="trigger-item">
+        <div class="trigger-command">${escapeHtml(t.command)}</div>
+        <div class="trigger-description">${escapeHtml(t.description)}</div>
+      </div>
+    `).join('')}
+  `).join('');
 }
 
 function resetForm() {
