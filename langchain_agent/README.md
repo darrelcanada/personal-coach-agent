@@ -100,25 +100,45 @@ The agent will be running on `http://0.0.0.0:8001`. Ensure these URLs are correc
 
 ## Configuration
 
-### Personas
+All configuration is in `config.json` (project root). The config is organized by persona, with each persona having its own settings including proactive scheduling.
 
-Personas are now configured via the `config.json` file located in the project's root directory. This external JSON file holds a dictionary under the "personas" key, where each key is a Discord `channel_id` (as a string), and its value is the system prompt for that channel. The `"default"` key provides a fallback persona if a specific channel ID is not found.
+### Config Structure
 
-Example `config.json` structure (relevant section):
 ```json
 {
+  "_meta": { "version": "1.0" },
+  "_database": {
+    "db_connection_string": "sqlite:///memory.db",
+    "conversation_history_limit": 20
+  },
+  "_discord": {
+    "bot_url": "http://localhost:8000",
+    "agent_webhook_url": "http://localhost:8001/message",
+    "langchain_agent_url": "http://localhost:8001"
+  },
   "personas": {
-    "default": "You are a helpful general-purpose AI assistant. Please respond concisely.",
-    "1478120173071499264": "You are a cheerful and encouraging personal trainer AI named 'Coach'. Your goal is to help users achieve their fitness goals with positive reinforcement."
+    "default": {
+      "prompt": "You are a helpful assistant."
+    },
+    "CHANNEL_ID": {
+      "name": "Persona Name",
+      "description": "What this persona does.",
+      "prompt": "Your persona prompt here...",
+      "proactive_scheduling": {
+        "enabled": true,
+        "interval_seconds": 300,
+        "time_window": { "start_hour": 19, "end_hour": 22 },
+        "message_content": "Custom prompt or null for default."
+      }
+    }
   }
 }
 ```
-If `config.json` or its "personas" section is not found or is invalid, the agent will gracefully fall back to a hardcoded default persona to ensure continuous operation. To customize or add new personas, modify this `config.json` file.
 
-### Conversation History Limit
+### Key Settings
 
-The `CONVERSATION_HISTORY_LIMIT` is now configured in `config.json` in the project root. This value defines the number of past messages to include in the LLM's context for each conversation. Adjust this value to control the agent's memory length.
-
-### Database Connection String
-
-The `DB_CONNECTION_STRING` for the SQLite database is also configured in `config.json`. By default, it uses `sqlite:///memory.db`.
+- **prompt**: The system prompt for the persona
+- **proactive_scheduling.enabled**: Set to `true` to enable automatic check-ins
+- **proactive_scheduling.interval_seconds**: How often to check (not frequency of messages)
+- **proactive_scheduling.time_window**: Restrict messages to specific hours
+- **proactive_scheduling.message_content**: Custom prompt or `null` for default check-in
