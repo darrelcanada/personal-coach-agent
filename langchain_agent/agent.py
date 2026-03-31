@@ -758,12 +758,12 @@ async def _process_message(
             channel_id, process_user_profile(user_id, content)
         )
 
-    if content_lower.startswith("what's tonight's workout") or content_lower.startswith(
-        "what is tonight's workout"
-    ):
+    if "tonight" in content_lower and "workout" in content_lower:
         return await _send_to_discord(channel_id, get_workout_reminder())
 
-    if content_lower.startswith("what type of workout is"):
+    if "workout" in content_lower and (
+        "today" in content_lower or "type" in content_lower
+    ):
         return await _send_to_discord(channel_id, get_workout_reminder())
 
     persona_prompt = _get_persona_prompt(channel_id)
@@ -809,7 +809,10 @@ async def receive_message(request: Request):
 
 @app.post("/proactive_message")
 async def proactive_message_endpoint(channel_id: str, message_content: str = None):
-    prompt = message_content or get_workout_reminder()
+    if message_content == "WORKOUT_REMINDER":
+        prompt = get_workout_reminder()
+    else:
+        prompt = message_content or get_workout_reminder()
     await _process_message(channel_id, prompt, is_proactive=True)
     return {"status": "proactive message sent"}
 
