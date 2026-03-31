@@ -68,7 +68,11 @@ async def update_persona(channel_id: str, persona_data: dict):
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
 
-    return {"status": "updated", "persona": config["personas"][channel_id]}
+    return {
+        "status": "updated",
+        "persona": config["personas"][channel_id],
+        "note": "Use /api/config/reload to apply schedule changes",
+    }
 
 
 @app.post("/api/config/persona")

@@ -465,8 +465,8 @@ els.form.addEventListener('submit', async (e) => {
   }
 
   if (response.ok) {
-    showToast(isNew ? 'Persona created' : 'Persona updated', 'success');
-    await reloadBotAndRefresh();
+    showToast(isNew ? 'Persona created' : 'Persona updated. Click Reload Schedules to apply.', 'success');
+    await loadConfig();
   } else {
     const error = await response.json();
     showToast(error.error || 'Failed to save persona', 'error');
