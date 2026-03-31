@@ -10,14 +10,20 @@ This project implements a Discord bot that acts as a personal coach, leveraging 
 ├── README.md               # This file
 ├── AGENTS.md               # Agent/coding guidelines
 ├── config.json             # Shared configuration (personas, scheduling, URLs)
-├── discord_bot/            # Discord bot application
-│   ├── bot.py              # Main bot + FastAPI server
-│   ├── requirements.txt    # Python dependencies
-│   └── .env                # Environment variables (bot token only)
-└── langchain_agent/       # LangChain agent application
-    ├── agent.py            # Main agent + FastAPI server
-    ├── memory.db           # SQLite database (gitignored)
-    └── requirements.txt    # Python dependencies
+├── discord_bot/           # Discord bot application
+│   ├── bot.py             # Main bot + FastAPI server
+│   ├── requirements.txt   # Python dependencies
+│   └── .env               # Environment variables (bot token only)
+├── langchain_agent/       # LangChain agent application
+│   ├── agent.py           # Main agent + FastAPI server
+│   ├── memory.db          # SQLite database (gitignored)
+│   └── requirements.txt   # Python dependencies
+└── persona_ui/            # Persona configuration web interface
+    ├── server.py          # Web server
+    ├── index.html         # Main page
+    ├── styles.css         # Styling
+    ├── app.js             # Frontend logic
+    └── requirements.txt   # Python dependencies
 ```
 
 ## Features
@@ -106,6 +112,17 @@ cd discord_bot
 source venv/bin/activate
 python bot.py  # Runs on http://0.0.0.0:8000
 ```
+
+### 4. Start the `persona_ui` (optional)
+
+```bash
+cd persona_ui
+source venv/bin/activate
+pip install -r requirements.txt
+python server.py  # Runs on http://0.0.0.0:8002
+```
+
+Open `http://localhost:8002` to manage personas via web UI.
 
 ## Configuration
 
