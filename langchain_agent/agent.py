@@ -2,7 +2,7 @@ import re
 import json
 import os
 import sqlite3
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 
 import requests
 from dotenv import load_dotenv
@@ -38,17 +38,39 @@ CONVERSATION_HISTORY_LIMIT = config.get("_database", {}).get(
 )
 PERSONAS = config.get("personas", {})
 
+DEFAULT_EXERCISES = [
+    "push-ups",
+    "pushups",
+    "push ups",
+    "planks",
+    "plank",
+    "squats",
+    "squat",
+    "lunges",
+    "lunge",
+    "mountain climbers",
+    "burpees",
+    "jumping jacks",
+    "high knees",
+    "calf raises",
+    "leg raises",
+    "crunches",
+    "glute bridges",
+]
+
+JUMP_ROPE_DAYS = [0, 2, 4]
+BODY_WEIGHT_DAYS = [1, 3, 5]
+REST_DAY = 6
+
 
 def _get_persona_prompt(channel_id: str) -> str:
-    """Get the prompt for a given channel_id, fallback to default."""
     persona = PERSONAS.get(channel_id) or PERSONAS.get("default")
     if isinstance(persona, dict):
         return persona.get("prompt", "You are a helpful assistant.")
     return persona
 
 
-def initialize_health_database():
-    """Create health_log and user_profile tables if they don't exist."""
+def initialize_database():
     db_path = DB_CONNECTION_STRING.replace("sqlite:///", "")
     conn = None
     try:
@@ -81,8 +103,43 @@ def initialize_health_database():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS workout_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
+                workout_date DATE NOT NULL,
+                workout_type TEXT NOT NULL,
+                distance_km REAL DEFAULT 4.0,
+                completed INTEGER DEFAULT 1,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS jump_rope_session (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workout_id INTEGER NOT NULL,
+                total_sets INTEGER DEFAULT 25,
+                skips_per_set INTEGER DEFAULT 35,
+                set_duration_sec INTEGER DEFAULT 30,
+                rest_duration_sec INTEGER DEFAULT 10,
+                sets_completed INTEGER,
+                FOREIGN KEY (workout_id) REFERENCES workout_log(id)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS bodyweight_exercise (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workout_id INTEGER NOT NULL,
+                exercise_name TEXT NOT NULL,
+                sets INTEGER,
+                reps INTEGER,
+                duration_sec INTEGER,
+                FOREIGN KEY (workout_id) REFERENCES workout_log(id)
+            )
+        """)
         conn.commit()
-        print(f"Health database initialized at {db_path}")
+        print(f"Database initialized at {db_path}")
     except sqlite3.Error as e:
         print(f"Error initializing database: {e}")
     finally:
@@ -91,7 +148,6 @@ def initialize_health_database():
 
 
 def log_health_data(user_id: str, message_content: str) -> str:
-    """Parse health data from message and store in database."""
     db_path = DB_CONNECTION_STRING.replace("sqlite:///", "")
     conn = None
     try:
@@ -178,7 +234,6 @@ def log_health_data(user_id: str, message_content: str) -> str:
 
 
 def process_health_query(user_id: str, message_content: str) -> str:
-    """Query health data from database based on user message."""
     db_path = DB_CONNECTION_STRING.replace("sqlite:///", "")
     conn = None
     response = "I couldn't find any data matching your query."
@@ -238,7 +293,6 @@ def process_health_query(user_id: str, message_content: str) -> str:
 
 
 def process_user_profile(user_id: str, message_content: str) -> str:
-    """Create or update user profile from message."""
     db_path = DB_CONNECTION_STRING.replace("sqlite:///", "")
     conn = None
     response = "I couldn't understand your profile. Try 'Set profile: Age: 30, Sex: Male, Height: 175cm'."
@@ -361,13 +415,292 @@ def process_user_profile(user_id: str, message_content: str) -> str:
             conn.close()
 
 
+def _normalize_exercise_name(name: str) -> str:
+    name = name.lower().strip()
+    replacements = {
+        "pushups": "push-ups",
+        "push ups": "push-ups",
+        "squat": "squats",
+        "lunge": "lunges",
+    }
+    return replacements.get(name, name)
+
+
+def _parse_workout_log(user_id: str, message_content: str) -> dict:
+    parsed = {
+        "workout_type": None,
+        "distance_km": 4.0,
+        "completed": 1,
+        "notes": None,
+        "jump_rope": None,
+        "exercises": [],
+    }
+
+    content_lower = message_content.lower()
+
+    if "jump rope" in content_lower or "jumping rope" in content_lower:
+        parsed["workout_type"] = "jump_rope"
+        parsed["jump_rope"] = {
+            "total_sets": 25,
+            "skips_per_set": 35,
+            "set_duration_sec": 30,
+            "rest_duration_sec": 10,
+            "sets_completed": 25,
+        }
+        if "only" in content_lower or "only did" in content_lower:
+            sets_match = re.search(r"only\s+(\d+)\s+sets?", content_lower)
+            if sets_match:
+                parsed["jump_rope"]["sets_completed"] = int(sets_match.group(1))
+                parsed["completed"] = 0
+
+    elif (
+        "body weight" in content_lower
+        or "bodyweight" in content_lower
+        or "walk" in content_lower
+    ):
+        parsed["workout_type"] = "body_weight"
+
+        exercise_pattern = r"(\w+[-\s]?\w*)\s+(\d+)[xX](\d+)(?:sec)?"
+        for match in re.finditer(exercise_pattern, message_content):
+            exercise_name = _normalize_exercise_name(match.group(1))
+            sets = int(match.group(2))
+            reps_or_duration = int(match.group(3))
+            is_time = (
+                "sec" in match.group(0).lower()
+                or "seconds" in content_lower[match.start() : match.end() + 20]
+            )
+
+            parsed["exercises"].append(
+                {
+                    "name": exercise_name,
+                    "sets": sets,
+                    "reps": reps_or_duration if not is_time else None,
+                    "duration_sec": reps_or_duration if is_time else None,
+                }
+            )
+
+        if "only" in content_lower:
+            parsed["completed"] = 0
+
+    return parsed
+
+
+def log_workout(user_id: str, message_content: str) -> str:
+    db_path = DB_CONNECTION_STRING.replace("sqlite:///", "")
+    conn = None
+    try:
+        parsed = _parse_workout_log(user_id, message_content)
+
+        if not parsed["workout_type"]:
+            return (
+                "I couldn't understand the workout type. Try:\n"
+                "- 'Log workout: Jump rope day, 4km walk, 25 sets of 35 skips'\n"
+                "- 'Log workout: Body weight day, push-ups 4x10, planks 3x30sec'"
+            )
+
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            INSERT INTO workout_log (user_id, workout_date, workout_type, distance_km, completed)
+            VALUES (?, ?, ?, ?, ?)
+        """,
+            (
+                user_id,
+                date.today().isoformat(),
+                parsed["workout_type"],
+                parsed["distance_km"],
+                parsed["completed"],
+            ),
+        )
+        workout_id = cursor.lastrowid
+
+        if parsed["workout_type"] == "jump_rope" and parsed["jump_rope"]:
+            jr = parsed["jump_rope"]
+            cursor.execute(
+                """
+                INSERT INTO jump_rope_session (workout_id, total_sets, skips_per_set, set_duration_sec, rest_duration_sec, sets_completed)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    workout_id,
+                    jr["total_sets"],
+                    jr["skips_per_set"],
+                    jr["set_duration_sec"],
+                    jr["rest_duration_sec"],
+                    jr["sets_completed"],
+                ),
+            )
+
+        elif parsed["workout_type"] == "body_weight":
+            for ex in parsed["exercises"]:
+                cursor.execute(
+                    """
+                    INSERT INTO bodyweight_exercise (workout_id, exercise_name, sets, reps, duration_sec)
+                    VALUES (?, ?, ?, ?, ?)
+                """,
+                    (
+                        workout_id,
+                        ex["name"],
+                        ex["sets"],
+                        ex.get("reps"),
+                        ex.get("duration_sec"),
+                    ),
+                )
+
+        conn.commit()
+
+        if parsed["workout_type"] == "jump_rope":
+            return f"Jump rope workout logged! {parsed['jump_rope']['sets_completed']} sets of {parsed['jump_rope']['skips_per_set']} skips completed."
+        else:
+            exercises_str = ", ".join(
+                [f"{e['sets']}x{e['name']}" for e in parsed["exercises"]]
+            )
+            return f"Body weight workout logged! {len(parsed['exercises'])} exercises completed: {exercises_str}"
+
+    except sqlite3.Error as e:
+        print(f"Error logging workout: {e}")
+        return "An error occurred while logging your workout."
+    finally:
+        if conn:
+            conn.close()
+
+
+def query_workout_history(user_id: str, message_content: str) -> str:
+    db_path = DB_CONNECTION_STRING.replace("sqlite:///", "")
+    conn = None
+    response = "I couldn't find workout data matching your query."
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        message_lower = message_content.lower()
+
+        today = date.today()
+        period_days = None
+        workout_type = None
+
+        if "today" in message_lower:
+            period_days = 0
+        elif "this week" in message_lower or "past week" in message_lower:
+            period_days = 6
+        elif "this month" in message_lower or "past month" in message_lower:
+            period_days = 29
+        elif "last week" in message_lower:
+            period_days = 13
+        elif "last month" in message_lower:
+            period_days = 59
+
+        if "jump rope" in message_lower:
+            workout_type = "jump_rope"
+        elif "body weight" in message_lower or "bodyweight" in message_lower:
+            workout_type = "body_weight"
+
+        start_date = today - timedelta(days=period_days) if period_days else None
+
+        if period_days is None:
+            cursor.execute(
+                """
+                SELECT COUNT(*) FROM workout_log 
+                WHERE user_id = ? AND completed = 1
+            """,
+                (user_id,),
+            )
+        elif workout_type:
+            cursor.execute(
+                """
+                SELECT COUNT(*) FROM workout_log 
+                WHERE user_id = ? AND workout_date >= ? AND workout_type = ? AND completed = 1
+            """,
+                (user_id, start_date.isoformat(), workout_type),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT COUNT(*) FROM workout_log 
+                WHERE user_id = ? AND workout_date >= ? AND completed = 1
+            """,
+                (user_id, start_date.isoformat()),
+            )
+
+        count = cursor.fetchone()[0]
+
+        if count == 0:
+            period_str = (
+                "this period"
+                if period_days is None
+                else f"the last {period_days + 1} days"
+            )
+            type_str = f" {workout_type.replace('_', ' ')}" if workout_type else ""
+            return f"You haven't logged any{type_str} workouts {period_str}."
+
+        period_str = (
+            "in total" if period_days is None else f"in the last {period_days + 1} days"
+        )
+        type_str = f" {workout_type.replace('_', ' ')}" if workout_type else ""
+        response = f"You've completed {count} {type_str} workout{'' if count == 1 else 's'} {period_str}."
+
+        if workout_type == "jump_rope" and period_days is not None:
+            cursor.execute(
+                """
+                SELECT SUM(sets_completed) FROM workout_log w
+                JOIN jump_rope_session j ON w.id = j.workout_id
+                WHERE w.user_id = ? AND w.workout_date >= ?
+            """,
+                (user_id, start_date.isoformat()),
+            )
+            total_sets = cursor.fetchone()[0] or 0
+            total_skips = total_sets * 35
+            response += f" That's {total_sets} total sets and approximately {total_skips:,} skips!"
+
+        return response
+
+    except sqlite3.Error as e:
+        print(f"Error querying workout history: {e}")
+        return "An error occurred while retrieving your workout history."
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_todays_workout_type() -> str:
+    day = datetime.now().weekday()
+    if day in JUMP_ROPE_DAYS:
+        return "jump_rope"
+    elif day in BODY_WEIGHT_DAYS:
+        return "body_weight"
+    else:
+        return "rest"
+
+
+def get_workout_reminder() -> str:
+    workout_type = get_todays_workout_type()
+
+    if workout_type == "jump_rope":
+        return (
+            "Tonight's your jump rope night! 🪢\n"
+            "Remember: 4km walk around the town lap, then 25 sets of 35 skips "
+            "(30 sec on, 10 sec rest). You've got this!"
+        )
+    elif workout_type == "body_weight":
+        return (
+            "Body weight workout night! 💪\n"
+            "4km walk with your exercises:\n"
+            "- Push-ups: 4 sets of 10\n"
+            "- Planks: 3 sets of 30 seconds\n"
+            "- Squats: 3 sets of 15\n"
+            "Push through!"
+        )
+    else:
+        return "Rest day today! Recover well for tomorrow."
+
+
 llm = Ollama(model="llama3:8b")
 
 app = FastAPI()
 
 
 async def _send_to_discord(channel_id: str, message: str):
-    """Helper to send message back to Discord."""
     try:
         requests.post(
             f"{DISCORD_BOT_URL}/send_discord_message/",
@@ -380,11 +713,13 @@ async def _send_to_discord(channel_id: str, message: str):
 async def _process_message(
     channel_id: str, content: str, is_proactive: bool = False, user_id: str = None
 ):
-    """Process message through health handlers or LLM."""
     content_lower = content.lower()
 
     if content_lower.startswith("log health:") and user_id:
         return await _send_to_discord(channel_id, log_health_data(user_id, content))
+
+    if content_lower.startswith("log workout:") and user_id:
+        return await _send_to_discord(channel_id, log_workout(user_id, content))
 
     if (
         any(
@@ -400,6 +735,14 @@ async def _process_message(
         )
         and user_id
     ):
+        if (
+            "workout" in content_lower
+            or "exercise" in content_lower
+            or "jump rope" in content_lower
+        ):
+            return await _send_to_discord(
+                channel_id, query_workout_history(user_id, content)
+            )
         return await _send_to_discord(
             channel_id, process_health_query(user_id, content)
         )
@@ -414,6 +757,14 @@ async def _process_message(
         return await _send_to_discord(
             channel_id, process_user_profile(user_id, content)
         )
+
+    if content_lower.startswith("what's tonight's workout") or content_lower.startswith(
+        "what is tonight's workout"
+    ):
+        return await _send_to_discord(channel_id, get_workout_reminder())
+
+    if content_lower.startswith("what type of workout is"):
+        return await _send_to_discord(channel_id, get_workout_reminder())
 
     persona_prompt = _get_persona_prompt(channel_id)
     prompt = ChatPromptTemplate.from_messages(
@@ -458,18 +809,19 @@ async def receive_message(request: Request):
 
 @app.post("/proactive_message")
 async def proactive_message_endpoint(channel_id: str, message_content: str = None):
-    """Generate proactive message from agent."""
-    prompt = (
-        message_content
-        or "Generate a short check-in message. Ask how they're feeling and check on their progress."
-    )
+    prompt = message_content or get_workout_reminder()
     await _process_message(channel_id, prompt, is_proactive=True)
     return {"status": "proactive message sent"}
 
 
+@app.get("/api/workout/today")
+async def get_todays_workout():
+    return {"workout_type": get_todays_workout_type()}
+
+
 def run_server():
     print("Starting LangChain agent server...")
-    initialize_health_database()
+    initialize_database()
     uvicorn.run(app, host="0.0.0.0", port=8001)
 
 
