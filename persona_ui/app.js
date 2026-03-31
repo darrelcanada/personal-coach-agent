@@ -115,6 +115,17 @@ async function loadConfig() {
   }
 }
 
+async function fetchActiveSchedules() {
+  try {
+    const res = await fetch(`${BOT_API_BASE}/api/schedules`);
+    if (res.ok) {
+      activeSchedules = await res.json();
+    }
+  } catch (err) {
+    console.error('Failed to fetch active schedules:', err);
+  }
+}
+
 function populateSelect() {
   els.select.innerHTML = '<option value="">-- Choose a persona --</option>';
   const sorted = Object.entries(personas).sort(([a], [b]) => {
@@ -239,9 +250,11 @@ function startNew() {
   showEditor(true);
 }
 
-function startEdit(channelId) {
+async function startEdit(channelId) {
   const persona = personas[channelId];
   if (!persona) return;
+
+  await fetchActiveSchedules();
 
   els.isNew.value = 'false';
   els.editorTitle.textContent = 'Edit Persona';
