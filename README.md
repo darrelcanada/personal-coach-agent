@@ -1,116 +1,179 @@
-# Personal Coach AI Agent
+# Personal Coach Agent Project
 
-This project is a multi-persona AI coaching agent that interacts with users via Discord. It is powered by a local Large Language Model (LLM) through Ollama and uses the LangChain framework for its core logic, memory, and dynamic persona management.
+This project implements a Discord bot that acts as a personal coach, leveraging a LangChain agent with dynamic persona capabilities and proactive messaging. The project is composed of two main components: a `discord_bot` for handling Discord interactions and a `langchain_agent` for AI-driven responses and persona management.
+
+## Project Structure
+
+```
+.
+├── .gitignore
+├── README.md               # This file
+├── AGENTS.md                # Agent/coding guidelines
+├── config.json              # Shared configuration (personas, scheduling, URLs)
+├── discord_bot/             # Discord bot application
+│   ├── bot.py               # Main bot + FastAPI server
+│   ├── requirements.txt     # Python dependencies
+│   └── .env                 # Environment variables (bot token only)
+└── langchain_agent/         # LangChain agent application
+    ├── agent.py             # Main agent + FastAPI server
+    ├── memory.db            # SQLite database (gitignored)
+    └── requirements.txt     # Python dependencies
+```
+.
+├── .gitignore
+├── README.md               # This file
+├── discord_bot/            # Discord bot application
+│   ├── bot.py              # Main bot logic
+│   ├── requirements.txt    # Python dependencies for the bot
+│   └── .env                # Environment variables for bot token and agent URL
+└── langchain_agent/        # LangChain agent application
+    ├── agent.py            # FastAPI server for agent responses and persona management
+    ├── requirements.txt    # Python dependencies for the agent
+    └── .env                # Environment variables for agent configuration
+```
 
 ## Features
 
-- **Multi-Persona Support**: The agent can adopt different personalities and roles (e.g., "Personal Trainer," "Math Tutor") in different Discord channels, configured via a simple JSON file.
-- **Persistent Memory**: Conversation history is stored permanently in a SQLite database, allowing the agent to remember context across restarts. Each channel's conversation is stored independently.
-- **Local LLM Integration**: Natively uses a locally-hosted LLM via Ollama (`llama3:8b` by default).
-- **Git Version Control**: The project is structured for version control using a `main`/`develop` branch strategy.
-
----
-
-## Architecture Overview
-
-The system is composed of two primary services that run independently and communicate via an HTTP API. This decoupled design makes the system modular and easier to maintain.
-
-```
-+---------------------------------------------+      +------------------------------------------------+
-|          User on Discord Client             |      |                                                |
-+---------------------------------------------+      |                                                |
-                   ^    |                            |                                                |
-                   |    v                            |                                                |
-+------------------+----|--------------------------+ |                                                |
-|   Discord Server (Channels, e.g., #trainer)      | |                                                |
-+--------------------------------------------------+ |                                                |
-                   ^    |                            |                                                |
-                   |    v                            |                                                |
-+------------------+----|--------------------------+<----+            +--------------------------------+
-|       1. Discord Bot (`discord_bot`)             |     |            |       2. LangChain Agent       |
-|--------------------------------------------------|     | POST       |      (`langchain_agent`)         |
-| - Listens for user messages in all channels.     |--+  | Response   |--------------------------------|
-| - Forwards new messages via HTTP POST to the     |  +->|            | - Listens for messages from bot. |
-|   LangChain Agent.                             |     |            | - Loads persona from personas.json.|
-| - Exposes an API to receive and post the         |     |            | - Retrieves history from memory.db.|
-|   agent's final response back to Discord.        |     |            | - Invokes LLM to get a response. |
-+--------------------------------------------------+     |            | - Saves new turn to memory.db.   |
-                                                         |            +--------------------------------+
-```
-
----
-
-## Systematic Overview (For LLM/Developer Review)
-
-### Key Components
-
-1.  **`discord_bot/`**
-    *   **Purpose**: A stateless bridge between the Discord API and the LangChain agent.
-    *   **Technology**: Python, `discord.py`, `fastapi`.
-    *   **`bot.py`**: The main script. It runs the Discord client and a FastAPI server that exposes `/send_discord_message/` for the agent to send replies. On receiving a user message, it makes a POST request to the agent's `/message` endpoint.
-
-2.  **`langchain_agent/`**
-    *   **Purpose**: The "brain" of the system. It handles all state, memory, and intelligent response generation.
-    *   **Technology**: Python, `langchain`, `fastapi`, `SQLAlchemy`, `ollama`.
-    *   **`agent.py`**: The main application. Runs a FastAPI server listening on the `/message` endpoint.
-    *   **`personas.json`**: A key-value store mapping a Discord `channel_id` (string) to a `system_prompt` (string). This allows for different agent personas in different channels. Includes a `"default"` persona as a fallback.
-    *   **`memory.db`**: A SQLite database file that serves as the persistent memory store. LangChain's `SQLChatMessageHistory` uses this file to automatically save and retrieve conversation history, keyed by a `session_id` (which we set as the `channel_id`).
-
----
+*   **Dynamic Personas:** The LangChain agent can adopt different personas based on the Discord channel ID. This allows for specialized interactions (e.g., a "Trainer" persona for fitness-related channels, a "Coding Assistant" for tech channels).
+*   **Proactive Messaging:** The Discord bot can schedule and send proactive messages from the LangChain agent to specific Discord channels, enabling features like automated check-ins or reminders.
+*   **API-driven Communication:** Both components communicate via FastAPI endpoints, providing a flexible and scalable architecture.
+*   **Conversation History:** The LangChain agent maintains conversation history using an SQLite database.
 
 ## Setup and Installation
 
 ### Prerequisites
 
 *   Python 3.10+
-*   Git
-*   [Ollama](https://ollama.com/) running with a model pulled (e.g., `ollama pull llama3:8b`).
-*   A Discord Bot Token.
+*   A Discord account and a created Discord Bot (see `discord_bot/README.md` for details).
 
-### Configuration
-
-1.  **Discord Bot**:
-    *   In `discord_bot/.env`, set your `DISCORD_TOKEN`.
-    *   The `AGENT_WEBHOOK_URL` should point to your LangChain agent's server (default is `http://localhost:8001/message`).
-2.  **LangChain Agent**:
-    *   In `langchain_agent/personas.json`, map your desired Discord channel IDs to system prompts to define your agent's personas.
-
-### Launch Procedure
-
-You must run both the bot and the agent simultaneously in two separate terminals.
-
-**Terminal 1: Start the Discord Bot**
+### 1. Clone the Repository
 
 ```bash
-# Navigate to the discord_bot directory
-cd /path/to/your/project/personal-coach-agent/discord_bot
-
-# Create and activate the virtual environment (only needed once)
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies (only needed once)
-pip install -r requirements.txt
-
-# Run the bot
-python bot.py
+git clone <your-repo-url>
+cd personal-coach-agent
 ```
 
-**Terminal 2: Start the LangChain Agent**
+### 2. Set Up Python Virtual Environments
+
+Each component (`discord_bot` and `langchain_agent`) has its own virtual environment and dependencies.
+
+#### For `discord_bot`:
 
 ```bash
-# Navigate to the langchain_agent directory
-cd /path/to/your/project/personal-coach-agent/langchain_agent
-
-# Create and activate the virtual environment (only needed once)
+cd discord_bot
 python3 -m venv venv
 source venv/bin/activate
-
-# Install dependencies (only needed once)
 pip install -r requirements.txt
+deactivate
+```
 
-# Run the agent
+#### For `langchain_agent`:
+
+```bash
+cd ../langchain_agent
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+deactivate
+cd .. # Return to project root
+```
+
+### 3. Configure Environment Variables
+
+Create a `.env` file in the `discord_bot` directory (`discord_bot/.env`). This file should contain your Discord bot token:
+
+#### `discord_bot/.env`
+
+```
+DISCORD_TOKEN="YOUR_DISCORD_BOT_TOKEN"
+```
+Replace `YOUR_DISCORD_BOT_TOKEN` with your actual Discord bot token. Other configurations like agent URLs and proactive scheduling are managed in `config.json` (in the project root).
+
+### 4. Invite the Discord Bot to Your Server
+
+Follow the instructions in `discord_bot/README.md` to invite your bot to your Discord server and grant it necessary permissions.
+
+## Running the Project
+
+To run the entire project, you need to start both the `langchain_agent` and the `discord_bot` in separate terminals.
+
+### 1. Start the `langchain_agent`
+
+From the project root:
+
+```bash
+cd langchain_agent
+source venv/bin/activate
 python agent.py
 ```
+The agent's FastAPI server will be running on `http://0.0.0.0:8001`.
 
-Once both services are running, the agent is live and will respond in your Discord server according to your `personas.json` configuration.
+### 2. Start the `discord_bot`
+
+From the project root (in a *new* terminal):
+
+```bash
+cd discord_bot
+source venv/bin/activate
+python bot.py
+```
+The Discord bot will connect to Discord, and its internal FastAPI server will run on `http://0.0.0.0:8000`. It will also start scheduling proactive messages as configured.
+
+## Usage
+
+Once both components are running:
+
+*   **Chat with the Bot:** Send messages in your Discord channel. The bot will forward them to the `langchain_agent`, which will respond based on the persona configured for that channel.
+*   **Proactive Messages:** The Discord bot can schedule and send proactive messages from the LangChain agent to specific Discord channels. These are configured in the `"proactive_scheduling"` section of `config.json`.
+*   **Proactive Scheduling:** Adjust the `"proactive_scheduling"` section in `config.json` to define, change the frequency, content, or time windows for proactive messages. Use `start_hour` and `end_hour` to restrict messages to specific hours (e.g., 19:00-22:00).
+
+*   **Health Data Logging:** You can log your health data by sending messages to the bot starting with "Log health:". The agent will parse the message and store the data in an SQLite database.
+
+    **Examples:**
+    *   `Log health: Weight: 75.5kg`
+    *   `Log health: Walked 10000 steps`
+    *   `Log health: 5km walk`
+    *   `Log health: Slept 7.5 hours`
+    *   `Log health: Goals: 12000 steps, 30min run`
+    *   `Log health: Weight: 75.5kg, Walked 10000 steps, Slept 7.5 hours`
+
+    **Querying Health Data:** You can ask the agent questions about your logged health data. The agent will attempt to retrieve and summarize the relevant information.
+
+    **Examples:**
+    *   `How much did I walk this week?`
+    *   `What is my weight today?`
+    *   `How many steps did I take yesterday?`
+    *   `How long did I sleep last month?`
+
+    To view your logged health data directly in the database, you can use the `sqlite3` CLI tool:
+    ```bash
+    # View all entries in the health_log table
+    sqlite3 langchain_agent/memory.db "SELECT * FROM health_log;"
+
+    # View all entries in the user_profile table
+    sqlite3 langchain_agent/memory.db "SELECT * FROM user_profile;"
+    ```
+
+### User Profile Management
+
+You can set and update your basic profile information, which provides foundational context for calculations and personalized coaching. This data is stored in the `user_profile` table.
+
+**Examples:**
+*   `Set profile: Age: 30, Sex: Male, Height: 175cm, Goal weight: 70kg, Activity: moderate`
+*   `Update profile: Age: 31, Activity: active`
+
+The `user_profile` table schema:
+```
+CREATE TABLE IF NOT EXISTS user_profile (
+    user_id TEXT PRIMARY KEY,
+    age INTEGER,
+    sex TEXT,
+    height_cm REAL,
+    baseline_weight_kg REAL,
+    goal_weight_kg REAL,
+    activity_level TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)
+```
+
