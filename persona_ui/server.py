@@ -12,6 +12,8 @@ config_path = current_dir.parent / "config.json"
 
 app = FastAPI()
 
+app.mount("/static", StaticFiles(directory=current_dir), name="static")
+
 STATIC_DIR = current_dir
 
 
