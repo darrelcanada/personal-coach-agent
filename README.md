@@ -61,9 +61,31 @@ The Persona UI runs on port 8002 and provides:
 | `id` | Unique identifier for the schedule |
 | `name` | Display name (e.g., "Workout Reminder") |
 | `enabled` | Whether the schedule is active (true/false) |
-| `interval_seconds` | How often to send messages (e.g., 7200 = 2 hours) |
+| `interval_seconds` | How often to check (e.g., 7200 = 2 hours) |
 | `time_window` | Time range with minute precision (`start_hour`, `start_minute`, `end_hour`, `end_minute`) |
-| `message_content` | The message to send. Use `WORKOUT_REMINDER` for automatic workout content |
+| `message_content` | Input to LLM - see below |
+
+### Proactive Message Content Types
+
+The `message_content` field determines what the LLM receives:
+
+| Type | Example | Behavior |
+|------|---------|----------|
+| `WORKOUT_REMINDER` | `"WORKOUT_REMINDER"` | Uses built-in function to generate today's workout (jump rope / body weight / rest) |
+| Custom text | `"What are you grateful for today?"` | Sends custom prompt directly to LLM |
+| Empty/null | `null` | Falls back to `WORKOUT_REMINDER` |
+
+**Example - Workout Reminder:**
+```json
+"message_content": "WORKOUT_REMINDER"
+```
+→ LLM generates: "Tonight's your jump rope night! 🪢 Remember: 4km walk..."
+
+**Example - Custom Prompt:**
+```json
+"message_content": "What are you grateful for today?"
+```
+→ LLM receives exactly that question and responds
 
 ### Time Window
 

@@ -38,7 +38,7 @@
         {
           "id": "workout_reminder",
           "name": "Workout Reminder",
-          "enabled": false,
+          "enabled": true,
           "interval_seconds": 60,
           "time_window": {
             "start_hour": 9,

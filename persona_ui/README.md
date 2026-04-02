@@ -37,8 +37,15 @@ Then open `http://localhost:8002` in your browser.
 | Name | Display name (e.g., "Workout Reminder") |
 | Check Interval | Seconds between checks (e.g., 300 = 5 min, 7200 = 2 hours) |
 | Active Between | Start/end hours and minutes (e.g., 8:55 - 20:00) |
-| Message Content | Custom message or `WORKOUT_REMINDER` for auto content |
+| Message Content | Input to LLM - see below |
 | Enabled | Initial state on bot reload |
+
+### Message Content Types
+
+| Type | Example | Result |
+|------|---------|--------|
+| `WORKOUT_REMINDER` | `WORKOUT_REMINDER` | Auto-generates today's workout |
+| Custom text | `What are you grateful for today?` | Sends custom prompt to LLM |
 
 ## Pause/Resume
 

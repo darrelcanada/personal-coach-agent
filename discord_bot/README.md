@@ -132,7 +132,15 @@ Proactive messages are configured per-persona in `config.json`. Each persona can
 | `time_window.start_minute` | Start minute (0-59) |
 | `time_window.end_hour` | End hour (0-23) |
 | `time_window.end_minute` | End minute (0-59) |
-| `message_content` | Custom message or `WORKOUT_REMINDER` |
+| `message_content` | Input to LLM - see below |
+
+### message_content Types
+
+| Type | Example | Result |
+|------|---------|--------|
+| `WORKOUT_REMINDER` | `"WORKOUT_REMINDER"` | Auto-generates today's workout (jump rope/body weight/rest) |
+| Custom text | `"What are you grateful for today?"` | Sends custom prompt to LLM |
+| Empty | `null` | Falls back to WORKOUT_REMINDER |
 
 ## API Endpoints
 
