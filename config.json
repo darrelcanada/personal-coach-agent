@@ -38,18 +38,20 @@
         {
           "id": "workout_reminder",
           "name": "Workout Reminder",
-          "enabled": true,
-          "interval_seconds": 7200,
+          "enabled": false,
+          "interval_seconds": 60,
           "time_window": {
-            "start_hour": 18,
-            "end_hour": 19
+            "start_hour": 9,
+            "start_minute": 0,
+            "end_hour": 19,
+            "end_minute": 0
           },
           "message_content": "WORKOUT_REMINDER"
         },
         {
           "id": "schedule_mnh4hz6j",
           "name": "Test Message",
-          "enabled": false,
+          "enabled": true,
           "interval_seconds": 60,
           "time_window": {
             "start_hour": 8,
