@@ -71,7 +71,7 @@ def _load_schedules():
             schedules = [schedules] if schedules else []
 
         for schedule in schedules:
-            if not schedule or not schedule.get("enabled"):
+            if not schedule: # Skip empty schedule entries
                 continue
 
             schedule_id = schedule.get("id") or f"{channel_id}_{len(schedule_registry)}"
@@ -80,6 +80,7 @@ def _load_schedules():
             time_window = schedule.get("time_window", {})
             start_hour = time_window.get("start_hour")
             end_hour = time_window.get("end_hour")
+            is_enabled_in_config = schedule.get("enabled", True) # Get initial enabled state from config
 
             schedule_registry[job_id] = {
                 "channel_id": int(channel_id),
@@ -88,10 +89,10 @@ def _load_schedules():
                 "message_content": schedule.get("message_content"),
                 "start_hour": start_hour,
                 "end_hour": end_hour,
-                "enabled": schedule.get("enabled", True),
+                "enabled_in_config": is_enabled_in_config, # Store original enabled state from config
             }
 
-            scheduler.add_job(
+            job = scheduler.add_job(
                 _send_proactive_message,
                 "interval",
                 seconds=interval,
@@ -100,13 +101,17 @@ def _load_schedules():
                 replace_existing=True,
             )
 
+            if not is_enabled_in_config:
+                scheduler.pause_job(job_id)
+
             window_str = (
                 f" ({start_hour}:00-{end_hour}:00)"
                 if start_hour is not None and end_hour is not None
                 else ""
             )
+            status_str = " (PAUSED by config)" if not is_enabled_in_config else ""
             print(
-                f"[{persona.get('name', 'Unknown')}] Scheduled '{schedule.get('name', 'Unnamed')}'{window_str}"
+                f"[{persona.get('name', 'Unknown')}] Scheduled '{schedule.get('name', 'Unnamed')}'{window_str}{status_str}"
             )
 
 
@@ -148,7 +153,7 @@ async def get_schedules():
     schedules = []
     for job_id, schedule in schedule_registry.items():
         job = scheduler.get_job(job_id)
-        is_active = job is not None
+        is_active = job is not None and job.next_run_time is not None # True if scheduled and not paused
         schedules.append(
             {
                 "job_id": job_id,
@@ -158,8 +163,8 @@ async def get_schedules():
                 "message_content": schedule["message_content"],
                 "start_hour": schedule["start_hour"],
                 "end_hour": schedule["end_hour"],
-                "enabled": schedule["enabled"],
-                "is_active": is_active,
+                "enabled_in_config": schedule["enabled_in_config"], # Reflect config's initial enabled state
+                "is_active": is_active, # Reflect APScheduler's current runtime state
             }
         )
     return schedules
@@ -178,7 +183,6 @@ async def pause_schedule(job_id: str):
 async def resume_schedule(job_id: str):
     try:
         scheduler.resume_job(job_id)
-        await asyncio.sleep(0.5)
         return {"status": "resumed", "job_id": job_id}
     except Exception as e:
         return {"error": str(e)}, 400

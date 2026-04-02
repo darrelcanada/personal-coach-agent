@@ -72,6 +72,7 @@ const els = {
   scheduleStartHour: document.getElementById('schedule-start-hour'),
   scheduleEndHour: document.getElementById('schedule-end-hour'),
   scheduleMessage: document.getElementById('schedule-message'),
+  scheduleEnabled: document.getElementById('schedule-enabled'),
   cancelBtn: document.getElementById('cancel-btn'),
   deleteModal: document.getElementById('delete-modal'),
   deleteName: document.getElementById('delete-name'),
@@ -93,15 +94,12 @@ async function loadConfig() {
   hideEditor();
 
   try {
-    const [configRes, schedulesRes] = await Promise.all([
-      fetch(`${API_BASE}/api/config`),
-      fetch(`${BOT_API_BASE}/api/schedules`).catch(() => ({ ok: false, json: () => ({}) }))
-    ]);
-
+    const configRes = await fetch(`${API_BASE}/api/config?t=${Date.now()}`);
     if (!configRes.ok) throw new Error('Failed to load config');
     const config = await configRes.json();
     personas = config.personas || {};
 
+    const schedulesRes = await fetch(`${BOT_API_BASE}/api/schedules?t=${Date.now()}`);
     if (schedulesRes.ok) {
       activeSchedules = await schedulesRes.json();
     }
@@ -117,7 +115,7 @@ async function loadConfig() {
 
 async function fetchActiveSchedules() {
   try {
-    const res = await fetch(`${BOT_API_BASE}/api/schedules`);
+    const res = await fetch(`${BOT_API_BASE}/api/schedules?t=${Date.now()}`);
     if (res.ok) {
       activeSchedules = await res.json();
     }
@@ -176,7 +174,8 @@ function renderSchedules() {
   els.noSchedules.classList.toggle('hidden', hasSchedules);
 
   currentSchedules.forEach((schedule, index) => {
-    const isActive = activeSchedules.some(s => s.job_id === `proactive_${schedule.id}`);
+    const jobId = `proactive_${schedule.id}`;
+    const isActive = activeSchedules.some(s => s.job_id === jobId && s.is_active);
     const item = document.createElement('div');
     item.className = 'schedule-item';
     item.innerHTML = `
@@ -193,7 +192,7 @@ function renderSchedules() {
       </div>
       <div class="schedule-item-actions">
         <button class="btn btn-secondary btn-small" onclick="editSchedule(${index})">Edit</button>
-        <button class="btn btn-secondary btn-small" onclick="toggleSchedule('${schedule.id}', ${!isActive})">${isActive ? 'Pause' : 'Resume'}</button>
+        <button class="btn btn-secondary btn-small" onclick="toggleSchedule('${schedule.id}', ${!isActive}, this)">${isActive ? 'Pause' : 'Resume'}</button>
         <button class="btn btn-danger btn-small" onclick="deleteSchedule(${index})">Delete</button>
       </div>
     `;
@@ -263,7 +262,8 @@ async function startEdit(channelId) {
   els.name.value = persona.name || '';
   els.description.value = persona.description || '';
   els.prompt.value = persona.prompt || '';
-  currentSchedules = persona.proactive_scheduling || [];
+  console.log("DEBUG: persona.proactive_scheduling before deep copy:", JSON.stringify(persona.proactive_scheduling || [], null, 2));
+  currentSchedules = JSON.parse(JSON.stringify(persona.proactive_scheduling || [])); // Deep copy
   renderSchedules();
   renderTriggers(persona.name || '');
   showEditor(true);
@@ -292,13 +292,15 @@ function openScheduleModal(index = -1) {
     els.scheduleStartHour.value = schedule.time_window?.start_hour ?? 18;
     els.scheduleEndHour.value = schedule.time_window?.end_hour ?? 19;
     els.scheduleMessage.value = schedule.message_content || '';
+    els.scheduleEnabled.checked = schedule.enabled ?? true; // Set checkbox state
   } else {
     els.scheduleName.value = '';
     els.scheduleInterval.value = 3600;
     els.scheduleStartHour.value = 18;
     els.scheduleEndHour.value = 19;
     els.scheduleMessage.value = '';
-  }
+    els.scheduleEnabled.checked = true; // Default to enabled for new schedules
+  } // <-- Added closing brace here
 
   els.scheduleModal.classList.remove('hidden');
 }
@@ -318,21 +320,30 @@ function deleteSchedule(index) {
   }
 }
 
-async function toggleSchedule(scheduleId, enable) {
+async function toggleSchedule(scheduleId, enable, buttonEl) {
   const jobId = `proactive_${scheduleId}`;
+  const btn = buttonEl || event.target;
+  const originalText = btn.textContent;
+  btn.textContent = '...';
+  btn.disabled = true;
+  
   try {
     const endpoint = enable ? 'resume' : 'pause';
-    const res = await fetch(`${BOT_API_BASE}/api/schedules/${jobId}/${endpoint}`, { method: 'POST' });
-    if (res.ok) {
-      showToast(enable ? 'Schedule resumed' : 'Schedule paused', 'success');
-      await new Promise(r => setTimeout(r, 600));
-      await loadConfig();
-      startEdit(els.channelId.value);
-    } else {
-      showToast('Failed to update schedule', 'error');
+    const res = await fetch(`${BOT_API_BASE}/api/schedules/${jobId}/${endpoint}?t=${Date.now()}`, { method: 'POST' });
+    if (!res.ok) {
+      showToast('Failed to update schedule status in bot', 'error');
+      return;
     }
+    showToast(enable ? 'Schedule resumed' : 'Schedule paused', 'success');
+    
+    // Immediately re-fetch active schedules from the bot and re-render
+    await fetchActiveSchedules();
+    renderSchedules();
   } catch (err) {
     showToast('Error: ' + err.message, 'error');
+  } finally {
+    btn.textContent = originalText;
+    btn.disabled = false;
   }
 }
 
@@ -373,14 +384,15 @@ els.cancelBtn.addEventListener('click', resetForm);
 els.addScheduleBtn.addEventListener('click', () => openScheduleModal());
 els.reloadSchedulesBtn.addEventListener('click', reloadSchedules);
 
-els.scheduleForm.addEventListener('submit', (e) => {
-  e.preventDefault();
-  const index = parseInt(els.editScheduleIndex.value);
+  els.scheduleForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const index = parseInt(els.editScheduleIndex.value);
+    
+    console.log("DEBUG: scheduleEnabled checkbox checked state:", document.getElementById('schedule-enabled').checked);
 
-  const schedule = {
-    id: index >= 0 ? (currentSchedules[index].id || generateId()) : generateId(),
+    const schedule = {    id: index >= 0 ? (currentSchedules[index].id || generateId()) : generateId(),
     name: els.scheduleName.value.trim(),
-    enabled: true,
+    enabled: document.getElementById('schedule-enabled').checked, // Explicitly get checked state from DOM
     interval_seconds: parseInt(els.scheduleInterval.value) || 3600,
     time_window: {
       start_hour: parseInt(els.scheduleStartHour.value) || 18,
@@ -393,6 +405,13 @@ els.scheduleForm.addEventListener('submit', (e) => {
     currentSchedules[index] = schedule;
   } else {
     currentSchedules.push(schedule);
+  }
+  console.log("DEBUG: currentSchedules after modal update:", JSON.stringify(currentSchedules, null, 2));
+
+  // Update the global personas object with the modified currentSchedules
+  const channelId = els.channelId.value; // Get the channelId of the currently edited persona
+  if (channelId && personas[channelId]) {
+    personas[channelId].proactive_scheduling = currentSchedules;
   }
 
   closeScheduleModal();
@@ -441,14 +460,15 @@ els.form.addEventListener('submit', async (e) => {
     return;
   }
 
-  const personaData = {
-    name: els.name.value.trim(),
-    description: els.description.value.trim(),
-    prompt: els.prompt.value.trim(),
-    proactive_scheduling: currentSchedules
-  };
-
-  let response;
+      const personaData = {
+        name: els.name.value.trim(),
+        description: els.description.value.trim(),
+        prompt: els.prompt.value.trim(),
+        proactive_scheduling: currentSchedules
+      };
+      
+      console.log("DEBUG: currentSchedules before personaData construction:", JSON.stringify(currentSchedules, null, 2));
+      console.log("DEBUG: personaData being sent to backend:", JSON.stringify(personaData, null, 2));  let response;
   if (isNew) {
     personaData.channel_id = channelId;
     response = await fetch(`${API_BASE}/api/config/persona`, {

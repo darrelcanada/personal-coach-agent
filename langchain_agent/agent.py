@@ -808,7 +808,10 @@ async def receive_message(request: Request):
 
 
 @app.post("/proactive_message")
-async def proactive_message_endpoint(channel_id: str, message_content: str = None):
+async def proactive_message_endpoint(request: Request):
+    data = await request.json()
+    channel_id = data.get("channel_id")
+    message_content = data.get("message_content")
     if message_content == "WORKOUT_REMINDER":
         prompt = get_workout_reminder()
     else:

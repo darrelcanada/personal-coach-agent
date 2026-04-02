@@ -47,15 +47,37 @@
           "message_content": "WORKOUT_REMINDER"
         },
         {
-          "id": "schedule_mnf1yvgb",
+          "id": "schedule_mngenhks",
           "name": "You can do Hard Things.",
           "enabled": true,
           "interval_seconds": 3600,
           "time_window": {
-            "start_hour": 21,
-            "end_hour": 22
+            "start_hour": 20,
+            "end_hour": 21
           },
-          "message_content": "Explain to the user that they have the ability to do hard things.  Do not lose focus on the goals and do no get overwhelmed by little things."
+          "message_content": "tell the user he can do hard things."
+        },
+        {
+          "id": "schedule_mngfv3u1",
+          "name": "Daily Thought",
+          "enabled": true,
+          "interval_seconds": 300,
+          "time_window": {
+            "start_hour": 18,
+            "end_hour": 19
+          },
+          "message_content": "What are you grateful for today?"
+        },
+        {
+          "id": "schedule_mnh4hz6j",
+          "name": "Daily Thought",
+          "enabled": false,
+          "interval_seconds": 300,
+          "time_window": {
+            "start_hour": 7,
+            "end_hour": 8
+          },
+          "message_content": "you are a good person."
         }
       ]
     },

@@ -22,9 +22,10 @@ A Discord bot with AI-powered personal coaching via LangChain. Multiple personas
 | **Dynamic Personas** | AI personas per Discord channel (Trainer, Math Tutor, etc.) |
 | **Workout Tracking** | Structured walking routine with jump rope and bodyweight exercises |
 | **Health Logging** | Log weight, steps, sleep via Discord |
-| **Proactive Reminders** | Day-based workout reminders at scheduled times |
+| **Proactive Reminders** | Scheduled check-in messages with time windows |
 | **User Profiles** | Store age, height, goals for personalized coaching |
 | **Conversation Memory** | SQLite-backed chat history per channel |
+| **Web UI** | Visual interface for managing personas and schedules |
 
 ## Quick Start
 
@@ -38,73 +39,76 @@ cd langchain_agent && source venv/bin/activate && python agent.py
 # Terminal 3: Discord Bot
 cd discord_bot && source venv/bin/activate && python bot.py
 
-# Optional: Persona UI
+# Terminal 4: Persona UI (optional)
 cd persona_ui && source venv/bin/activate && python server.py
 ```
 
-See `discord_bot/README.md` for Discord bot setup instructions.
+Then open http://localhost:8002 in your browser.
 
-## Workout Tracking
+## Web UI (Persona Management)
 
-The project includes a structured walking routine with two workout types:
+The Persona UI runs on port 8002 and provides:
+- View all personas
+- Edit persona details (name, description, prompt)
+- Add/edit/delete proactive check-in schedules
+- Pause/resume schedules instantly
+- Reload bot to apply changes
 
-### Workout Schedule
+### Check-in Schedule Fields
 
-| Day | Type | Description |
-|-----|------|-------------|
-| Monday | Jump Rope | 4km walk + 25 sets of 35 skips (30s on/10s rest) |
-| Tuesday | Body Weight | 4km walk + bodyweight exercises |
-| Wednesday | Jump Rope | 4km walk + 25 sets of 35 skips |
-| Thursday | Body Weight | 4km walk + bodyweight exercises |
-| Friday | Jump Rope | 4km walk + 25 sets of 35 skips |
-| Saturday | Body Weight | 4km walk + bodyweight exercises |
-| Sunday | Rest | No workout |
+| Field | Description |
+|-------|-------------|
+| `id` | Unique identifier for the schedule |
+| `name` | Display name (e.g., "Workout Reminder") |
+| `enabled` | Whether the schedule is active in config (true/false) |
+| `interval_seconds` | How often to send messages (e.g., 7200 = 2 hours) |
+| `time_window` | Hour range when messages can be sent |
+| `message_content` | The message to send |
 
-### Default Body Weight Exercises
+### Pause/Resume Behavior
 
-- Push-ups: 4 sets of 10
-- Planks: 3 sets of 30 seconds
-- Squats: 3 sets of 15
-- Lunges, Mountain Climbers, Burpees, etc.
+- **Pause**: Instantly stops the scheduler from sending messages. State is maintained in memory until the next reload.
+- **Resume**: Instantly resumes the scheduler.
+- **Reload**: Re-reads config.json and recreates all scheduled jobs. If `enabled: false` in config, the job starts paused.
 
-### Logging Workouts
+## Configuration
 
-**Jump Rope Days:**
-```
-Log workout: Jump rope night
-Log workout: Jump rope day, 4km walk, 25 sets of 35 skips
-```
+All settings in `config.json`:
 
-**Body Weight Days:**
-```
-Log workout: Body weight day, push-ups 4x10, planks 3x30sec, squats 3x15
-Log workout: Body weight, lunges 3x12, mountain climbers 3x20
-```
-
-**Partial Completion:**
-```
-Log workout: Jump rope night, only did 20 sets
-Log workout: Body weight, push-ups 4x10 (only 3 sets)
-```
-
-### Querying Workout History
-
-```
-How many workouts did I do this week?
-How many jump rope workouts this month?
-How many body weight exercises last week?
-Show my workout history
-```
-
-### Workout Reminders
-
-Ask the bot:
-```
-What's tonight's workout?
-What type of workout is today?
+```json
+{
+  "_database": { "db_connection_string": "sqlite:///memory.db" },
+  "_discord": { "bot_url": "http://localhost:8000" },
+  "personas": {
+    "CHANNEL_ID": {
+      "name": "Persona Name",
+      "prompt": "System prompt...",
+      "proactive_scheduling": [
+        {
+          "id": "workout_reminder",
+          "name": "Workout Reminder",
+          "enabled": true,
+          "interval_seconds": 7200,
+          "time_window": { "start_hour": 18, "end_hour": 19 },
+          "message_content": "WORKOUT_REMINDER"
+        }
+      ]
+    }
+  }
+}
 ```
 
-Proactive reminders are sent at scheduled times (configured per persona in `config.json`).
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/config` | GET | Get full config |
+| `/api/config` | PUT | Update persona |
+| `/api/config/reload` | POST | Reload bot schedules |
+| `/api/schedules` | GET | Get all active schedules |
+| `/api/schedules/{job_id}/pause` | POST | Pause a schedule |
+| `/api/schedules/{job_id}/resume` | POST | Resume a schedule |
+| `/api/schedules/{job_id}/remove` | POST | Remove a schedule |
 
 ## Health Data Logging
 
@@ -125,29 +129,6 @@ What is my weight today?
 ```
 Set profile: Age: 30, Sex: Male, Height: 175cm, Goal weight: 70kg, Activity: moderate
 Update profile: Age: 31, Activity: active
-```
-
-## Configuration
-
-All settings in `config.json`:
-
-```json
-{
-  "_database": { "db_connection_string": "sqlite:///memory.db" },
-  "_discord": { "bot_url": "http://localhost:8000" },
-  "personas": {
-    "CHANNEL_ID": {
-      "name": "Persona Name",
-      "prompt": "System prompt...",
-      "proactive_scheduling": {
-        "enabled": true,
-        "interval_seconds": 7200,
-        "time_window": { "start_hour": 18, "end_hour": 19 },
-        "message_content": "WORKOUT_REMINDER"
-      }
-    }
-  }
-}
 ```
 
 ## Database

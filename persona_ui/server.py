@@ -11,6 +11,8 @@ import uvicorn
 current_dir = Path(__file__).parent
 config_path = current_dir.parent / "config.json"
 
+print(f"DEBUG: Using config.json path: {config_path.resolve()}")
+
 DISCORD_BOT_URL = "http://localhost:8000"
 
 app = FastAPI()
@@ -26,8 +28,10 @@ async def get_config():
         with open(config_path, "r") as f:
             return json.load(f)
     except FileNotFoundError:
+        print(f"ERROR: config.json not found at {config_path.resolve()}")
         return {"error": "config.json not found"}, 404
     except json.JSONDecodeError:
+        print(f"ERROR: config.json at {config_path.resolve()} is not valid JSON")
         return {"error": "config.json is not valid JSON"}, 500
 
 
@@ -52,12 +56,15 @@ async def reload_bot_schedules():
 
 @app.put("/api/config/persona/{channel_id}")
 async def update_persona(channel_id: str, persona_data: dict):
+    print(f"DEBUG: Incoming persona_data for {channel_id}: {json.dumps(persona_data, indent=2)}")
     try:
         with open(config_path, "r") as f:
             config = json.load(f)
     except FileNotFoundError:
+        print(f"ERROR: config.json not found at {config_path.resolve()}")
         return {"error": "config.json not found"}, 404
     except json.JSONDecodeError:
+        print(f"ERROR: config.json at {config_path.resolve()} is not valid JSON")
         return {"error": "config.json is not valid JSON"}, 500
 
     if channel_id not in config.get("personas", {}):
@@ -65,8 +72,18 @@ async def update_persona(channel_id: str, persona_data: dict):
 
     config["personas"][channel_id].update(persona_data)
 
-    with open(config_path, "w") as f:
-        json.dump(config, f, indent=2)
+    print(f"DEBUG: Config before writing: {json.dumps(config, indent=2)}")
+
+    try:
+        with open(config_path, "w") as f:
+            json.dump(config, f, indent=2)
+    except IOError as e:
+        print(f"ERROR: Failed to write config.json at {config_path.resolve()}: {e}")
+        return {"error": f"Failed to write config.json: {e}"}, 500
+    except Exception as e:
+        print(f"ERROR: An unexpected error occurred while writing config.json: {e}")
+        return {"error": f"Unexpected error writing config.json: {e}"}, 500
+
 
     return {
         "status": "updated",
