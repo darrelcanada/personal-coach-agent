@@ -71,6 +71,8 @@ const els = {
   scheduleInterval: document.getElementById('schedule-interval'),
   scheduleStartHour: document.getElementById('schedule-start-hour'),
   scheduleEndHour: document.getElementById('schedule-end-hour'),
+  scheduleStartMinute: document.getElementById('schedule-start-minute'),
+  scheduleEndMinute: document.getElementById('schedule-end-minute'),
   scheduleMessage: document.getElementById('schedule-message'),
   scheduleEnabled: document.getElementById('schedule-enabled'),
   cancelBtn: document.getElementById('cancel-btn'),
@@ -187,7 +189,7 @@ function renderSchedules() {
         </div>
       </div>
       <div class="schedule-item-details">
-        Every ${schedule.interval_seconds || 300}s | ${schedule.time_window?.start_hour ?? 0}:00 - ${schedule.time_window?.end_hour ?? 23}:00
+        Every ${schedule.interval_seconds || 300}s | ${schedule.time_window?.start_hour ?? 0}:${(schedule.time_window?.start_minute ?? 0).toString().padStart(2, '0')} - ${schedule.time_window?.end_hour ?? 23}:${(schedule.time_window?.end_minute ?? 0).toString().padStart(2, '0')}
         ${schedule.message_content ? `<br>Message: ${escapeHtml(schedule.message_content.substring(0, 50))}...` : ''}
       </div>
       <div class="schedule-item-actions">
@@ -262,8 +264,7 @@ async function startEdit(channelId) {
   els.name.value = persona.name || '';
   els.description.value = persona.description || '';
   els.prompt.value = persona.prompt || '';
-  console.log("DEBUG: persona.proactive_scheduling before deep copy:", JSON.stringify(persona.proactive_scheduling || [], null, 2));
-  currentSchedules = JSON.parse(JSON.stringify(persona.proactive_scheduling || [])); // Deep copy
+  currentSchedules = JSON.parse(JSON.stringify(persona.proactive_scheduling || []));
   renderSchedules();
   renderTriggers(persona.name || '');
   showEditor(true);
@@ -290,17 +291,21 @@ function openScheduleModal(index = -1) {
     els.scheduleName.value = schedule.name || '';
     els.scheduleInterval.value = schedule.interval_seconds || 300;
     els.scheduleStartHour.value = schedule.time_window?.start_hour ?? 18;
+    els.scheduleStartMinute.value = schedule.time_window?.start_minute ?? 0;
     els.scheduleEndHour.value = schedule.time_window?.end_hour ?? 19;
+    els.scheduleEndMinute.value = schedule.time_window?.end_minute ?? 0;
     els.scheduleMessage.value = schedule.message_content || '';
-    els.scheduleEnabled.checked = schedule.enabled ?? true; // Set checkbox state
+    els.scheduleEnabled.checked = schedule.enabled ?? true;
   } else {
     els.scheduleName.value = '';
     els.scheduleInterval.value = 3600;
     els.scheduleStartHour.value = 18;
+    els.scheduleStartMinute.value = 0;
     els.scheduleEndHour.value = 19;
+    els.scheduleEndMinute.value = 0;
     els.scheduleMessage.value = '';
-    els.scheduleEnabled.checked = true; // Default to enabled for new schedules
-  } // <-- Added closing brace here
+    els.scheduleEnabled.checked = true;
+  }
 
   els.scheduleModal.classList.remove('hidden');
 }
@@ -388,15 +393,16 @@ els.reloadSchedulesBtn.addEventListener('click', reloadSchedules);
     e.preventDefault();
     const index = parseInt(els.editScheduleIndex.value);
     
-    console.log("DEBUG: scheduleEnabled checkbox checked state:", document.getElementById('schedule-enabled').checked);
-
-    const schedule = {    id: index >= 0 ? (currentSchedules[index].id || generateId()) : generateId(),
+    const schedule = {
+    id: index >= 0 ? (currentSchedules[index].id || generateId()) : generateId(),
     name: els.scheduleName.value.trim(),
-    enabled: document.getElementById('schedule-enabled').checked, // Explicitly get checked state from DOM
+    enabled: document.getElementById('schedule-enabled').checked,
     interval_seconds: parseInt(els.scheduleInterval.value) || 3600,
     time_window: {
       start_hour: parseInt(els.scheduleStartHour.value) || 18,
-      end_hour: parseInt(els.scheduleEndHour.value) || 19
+      start_minute: parseInt(els.scheduleStartMinute.value) || 0,
+      end_hour: parseInt(els.scheduleEndHour.value) || 19,
+      end_minute: parseInt(els.scheduleEndMinute.value) || 0
     },
     message_content: els.scheduleMessage.value.trim() || null
   };
@@ -406,7 +412,6 @@ els.reloadSchedulesBtn.addEventListener('click', reloadSchedules);
   } else {
     currentSchedules.push(schedule);
   }
-  console.log("DEBUG: currentSchedules after modal update:", JSON.stringify(currentSchedules, null, 2));
 
   // Update the global personas object with the modified currentSchedules
   const channelId = els.channelId.value; // Get the channelId of the currently edited persona
@@ -467,8 +472,7 @@ els.form.addEventListener('submit', async (e) => {
         proactive_scheduling: currentSchedules
       };
       
-      console.log("DEBUG: currentSchedules before personaData construction:", JSON.stringify(currentSchedules, null, 2));
-      console.log("DEBUG: personaData being sent to backend:", JSON.stringify(personaData, null, 2));  let response;
+  let response;
   if (isNew) {
     personaData.channel_id = channelId;
     response = await fetch(`${API_BASE}/api/config/persona`, {

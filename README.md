@@ -60,16 +60,32 @@ The Persona UI runs on port 8002 and provides:
 |-------|-------------|
 | `id` | Unique identifier for the schedule |
 | `name` | Display name (e.g., "Workout Reminder") |
-| `enabled` | Whether the schedule is active in config (true/false) |
+| `enabled` | Whether the schedule is active (true/false) |
 | `interval_seconds` | How often to send messages (e.g., 7200 = 2 hours) |
-| `time_window` | Hour range when messages can be sent |
-| `message_content` | The message to send |
+| `time_window` | Time range with minute precision (`start_hour`, `start_minute`, `end_hour`, `end_minute`) |
+| `message_content` | The message to send. Use `WORKOUT_REMINDER` for automatic workout content |
+
+### Time Window
+
+Check-ins can be configured with minute precision:
+
+```json
+"time_window": {
+  "start_hour": 8,
+  "start_minute": 55,
+  "end_hour": 20,
+  "end_minute": 30
+}
+```
+
+This example shows a check-in active between 8:55 AM and 8:30 PM.
 
 ### Pause/Resume Behavior
 
-- **Pause**: Instantly stops the scheduler from sending messages. State is maintained in memory until the next reload.
-- **Resume**: Instantly resumes the scheduler.
-- **Reload**: Re-reads config.json and recreates all scheduled jobs. If `enabled: false` in config, the job starts paused.
+- **Pause Button**: Instantly stops the scheduler and updates config.json with `enabled: false`
+- **Resume Button**: Instantly resumes the scheduler and updates config.json with `enabled: true`
+- **Enabled Checkbox**: Sets initial state on bot reload (requires "Reload Schedules" to take effect)
+- **Reload**: Re-reads config.json and recreates all scheduled jobs based on `enabled` field
 
 ## Configuration
 
@@ -89,7 +105,12 @@ All settings in `config.json`:
           "name": "Workout Reminder",
           "enabled": true,
           "interval_seconds": 7200,
-          "time_window": { "start_hour": 18, "end_hour": 19 },
+          "time_window": {
+            "start_hour": 18,
+            "start_minute": 0,
+            "end_hour": 19,
+            "end_minute": 0
+          },
           "message_content": "WORKOUT_REMINDER"
         }
       ]
