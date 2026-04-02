@@ -38,7 +38,7 @@
         {
           "id": "workout_reminder",
           "name": "Workout Reminder",
-          "enabled": true,
+          "enabled": false,
           "interval_seconds": 60,
           "time_window": {
             "start_hour": 9,
@@ -51,7 +51,7 @@
         {
           "id": "schedule_mnh4hz6j",
           "name": "Test Message",
-          "enabled": true,
+          "enabled": false,
           "interval_seconds": 60,
           "time_window": {
             "start_hour": 8,
