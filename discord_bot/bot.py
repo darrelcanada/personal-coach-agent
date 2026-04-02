@@ -5,6 +5,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import threading
 import asyncio
@@ -38,73 +39,126 @@ intents.message_content = True
 bot = discord.Client(intents=intents)
 
 scheduler = AsyncIOScheduler()
-schedule_configs = {}
+schedule_registry = {}
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-def _is_within_time_window(start_hour: int | None, end_hour: int | None) -> bool:
-    """Check if current hour is within the allowed time window."""
+
+def _is_within_time_window(
+    start_hour: int | None,
+    start_minute: int | None,
+    end_hour: int | None,
+    end_minute: int | None,
+) -> bool:
     if start_hour is None or end_hour is None:
         return True
-    current_hour = datetime.now().hour
-    if start_hour <= end_hour:
-        return start_hour <= current_hour < end_hour
+    now = datetime.now()
+    current_time = now.hour * 60 + now.minute
+    start_time = start_hour * 60 + (start_minute or 0)
+    end_time = end_hour * 60 + (end_minute or 0)
+    if start_time <= end_time:
+        return start_time <= current_time < end_time
     else:
-        return current_hour >= start_hour or current_hour < end_hour
+        return current_time >= start_time or current_time < end_time
 
 
-def _load_schedule_configs():
-    """Load proactive schedule configs from personas in config.json."""
+def _load_schedules():
+    schedule_registry.clear()
     personas = config.get("personas", {})
-    for channel_id, persona_config in personas.items():
-        proactive = persona_config.get("proactive_scheduling")
-        if not proactive or not proactive.get("enabled"):
-            continue
 
-        interval_seconds = proactive.get("interval_seconds", 300)
-        time_window = proactive.get("time_window", {})
-        start_hour = time_window.get("start_hour")
-        end_hour = time_window.get("end_hour")
+    for channel_id, persona in personas.items():
+        schedules = persona.get("proactive_scheduling", []) or []
+        if not isinstance(schedules, list):
+            schedules = [schedules] if schedules else []
 
-        schedule_configs[channel_id] = {
-            "channel_id": int(channel_id),
-            "message_content": proactive.get("message_content"),
-            "start_hour": start_hour,
-            "end_hour": end_hour,
-        }
+        for schedule in schedules:
+            if not schedule:  # Skip empty schedule entries
+                continue
 
-        scheduler.add_job(
-            _send_proactive_message_to_agent,
-            "interval",
-            seconds=interval_seconds,
-            args=[channel_id],
-            id=f"proactive_{channel_id}",
-        )
+            schedule_id = schedule.get("id") or f"{channel_id}_{len(schedule_registry)}"
+            job_id = f"proactive_{schedule_id}"
+            interval = schedule.get("interval_seconds", 300)
+            time_window = schedule.get("time_window", {})
+            start_hour = time_window.get("start_hour")
+            start_minute = time_window.get("start_minute", 0)
+            end_hour = time_window.get("end_hour")
+            end_minute = time_window.get("end_minute", 0)
+            is_enabled_in_config = schedule.get(
+                "enabled", True
+            )  # Get initial enabled state from config
 
-        window_str = (
-            f" ({start_hour}:00-{end_hour}:00)" if start_hour and end_hour else ""
-        )
-        print(
-            f"Scheduled '{persona_config.get('name', 'Unnamed')}' check-in for channel {channel_id} every {interval_seconds}s{window_str}."
-        )
+            schedule_registry[job_id] = {
+                "channel_id": int(channel_id),
+                "persona_name": persona.get("name", "Unknown"),
+                "schedule_name": schedule.get("name", "Unnamed"),
+                "message_content": schedule.get("message_content"),
+                "start_hour": start_hour,
+                "start_minute": start_minute,
+                "end_hour": end_hour,
+                "end_minute": end_minute,
+                "enabled_in_config": is_enabled_in_config,  # Store original enabled state from config
+            }
+
+            job = scheduler.add_job(
+                _send_proactive_message,
+                "interval",
+                seconds=interval,
+                args=[job_id],
+                id=job_id,
+                replace_existing=True,
+            )
+
+            if not is_enabled_in_config:
+                scheduler.pause_job(job_id)
+
+            window_str = (
+                f" ({start_hour}:{start_minute:02d}-{end_hour}:{end_minute:02d})"
+                if start_hour is not None and end_hour is not None
+                else ""
+            )
+
+            interval_minutes = interval // 60
+            interval_str = (
+                f" every {interval_minutes}m"
+                if interval < 3600
+                else f" every {interval_minutes // 60}h"
+            )
+            status_str = " (PAUSED by config)" if not is_enabled_in_config else ""
+
+            print(
+                f"[{persona.get('name', 'Unknown')}] Scheduled '{schedule.get('name', 'Unnamed')}'{interval_str}{window_str}{status_str}"
+            )
 
 
-async def _send_proactive_message_to_agent(channel_id: str):
-    """Sends a proactive message to the LangChain agent if within the allowed time window."""
-    schedule = schedule_configs.get(channel_id)
+async def _send_proactive_message(job_id: str):
+    schedule = schedule_registry.get(job_id)
     if not schedule:
         return
 
-    persona = config.get("personas", {}).get(channel_id, {})
-    persona_name = persona.get("name", "Unknown")
-
     start_hour = schedule.get("start_hour")
+    start_minute = schedule.get("start_minute", 0)
     end_hour = schedule.get("end_hour")
+    end_minute = schedule.get("end_minute", 0)
+    persona_name = schedule.get("persona_name", "Unknown")
+    schedule_name = schedule.get("schedule_name", "Unnamed")
 
-    if not _is_within_time_window(start_hour, end_hour):
-        current_hour = datetime.now().hour
+    if not _is_within_time_window(start_hour, start_minute, end_hour, end_minute):
+        now = datetime.now()
+        current_time = f"{now.hour}:{now.minute:02d}"
+        window = (
+            f"{start_hour}:{start_minute:02d}-{end_hour}:{end_minute:02d}"
+            if start_hour and end_hour
+            else "any"
+        )
         print(
-            f"[{persona_name}] Skipped - outside time window ({current_hour}:00 not in {start_hour}-{end_hour})"
+            f"[{persona_name}] Skipped '{schedule_name}' - outside window ({current_time} not in {window})"
         )
         return
 
@@ -117,16 +171,122 @@ async def _send_proactive_message_to_agent(channel_id: str):
             },
         )
         print(
-            f"[{persona_name}] Sent proactive message to channel {schedule['channel_id']}."
+            f"[{persona_name}] Sent '{schedule_name}' to channel {schedule['channel_id']}"
         )
     except requests.exceptions.RequestException as e:
-        print(f"[{persona_name}] Error: {e}")
+        print(f"[{persona_name}] Error sending '{schedule_name}': {e}")
+
+
+@app.get("/api/schedules")
+async def get_schedules():
+    schedules = []
+    for job_id, schedule in schedule_registry.items():
+        job = scheduler.get_job(job_id)
+        is_active = (
+            job is not None and job.next_run_time is not None
+        )  # True if scheduled and not paused
+        schedules.append(
+            {
+                "job_id": job_id,
+                "channel_id": schedule["channel_id"],
+                "persona_name": schedule["persona_name"],
+                "schedule_name": schedule["schedule_name"],
+                "message_content": schedule["message_content"],
+                "start_hour": schedule.get("start_hour"),
+                "start_minute": schedule.get("start_minute", 0),
+                "end_hour": schedule.get("end_hour"),
+                "end_minute": schedule.get("end_minute", 0),
+                "enabled_in_config": schedule[
+                    "enabled_in_config"
+                ],  # Reflect config's initial enabled state
+                "is_active": is_active,  # Reflect APScheduler's current runtime state
+            }
+        )
+    return schedules
+
+
+@app.post("/api/schedules/{job_id}/pause")
+async def pause_schedule(job_id: str):
+    try:
+        scheduler.pause_job(job_id)
+
+        schedule_id = job_id.replace("proactive_", "")
+        _update_schedule_enabled(schedule_id, False)
+
+        print(f"DEBUG: After pause, config file check:")
+        with open(CONFIG_FILE, "r") as f:
+            config = json.load(f)
+        for p in config.get("personas", {}).values():
+            for s in p.get("proactive_scheduling", []):
+                if "workout" in s.get("id", ""):
+                    print(f"  workout_reminder enabled = {s.get('enabled')}")
+
+        return {"status": "paused", "job_id": job_id}
+    except Exception as e:
+        print(f"ERROR in pause_schedule: {e}")
+        return {"error": str(e)}, 400
+
+
+@app.post("/api/schedules/{job_id}/resume")
+async def resume_schedule(job_id: str):
+    try:
+        scheduler.resume_job(job_id)
+
+        schedule_id = job_id.replace("proactive_", "")
+        _update_schedule_enabled(schedule_id, True)
+
+        return {"status": "resumed", "job_id": job_id}
+    except Exception as e:
+        return {"error": str(e)}, 400
+
+
+def _update_schedule_enabled(schedule_id: str, enabled: bool):
+    print(
+        f"DEBUG: _update_schedule_enabled called with schedule_id={schedule_id}, enabled={enabled}"
+    )
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            config = json.load(f)
+
+        updated = False
+        for channel_id, persona in config.get("personas", {}).items():
+            schedules = persona.get("proactive_scheduling", []) or []
+            for schedule in schedules:
+                if schedule.get("id") == schedule_id:
+                    schedule["enabled"] = enabled
+                    updated = True
+                    print(f"DEBUG: Updated schedule {schedule_id} to enabled={enabled}")
+
+        if updated:
+            with open(CONFIG_FILE, "w") as f:
+                json.dump(config, f, indent=2)
+        else:
+            print(f"DEBUG: Schedule {schedule_id} not found in config")
+    except Exception as e:
+        print(f"Error updating schedule enabled state: {e}")
+
+
+@app.post("/api/schedules/{job_id}/remove")
+async def remove_schedule(job_id: str):
+    try:
+        scheduler.remove_job(job_id)
+        if job_id in schedule_registry:
+            del schedule_registry[job_id]
+        return {"status": "removed", "job_id": job_id}
+    except Exception as e:
+        return {"error": str(e)}, 400
+
+
+@app.post("/api/schedules/reload")
+async def reload_schedules():
+    _load_schedules()
+    return {"status": "reloaded"}
 
 
 @bot.event
 async def on_ready():
     print(f"Bot connected as {bot.user}")
-    _load_schedule_configs()
+    _load_schedules()
     scheduler.start()
     print("Scheduler started.")
 

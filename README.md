@@ -1,6 +1,6 @@
 # Personal Coach Agent Project
 
-This project implements a Discord bot that acts as a personal coach, leveraging a LangChain agent with dynamic persona capabilities and proactive messaging. The project is composed of two main components: a `discord_bot` for handling Discord interactions and a `langchain_agent` for AI-driven responses and persona management.
+A Discord bot with AI-powered personal coaching via LangChain. Multiple personas handle fitness tracking, workout logging, health data, and general assistance.
 
 ## Project Structure
 
@@ -9,196 +9,157 @@ This project implements a Discord bot that acts as a personal coach, leveraging 
 ├── .gitignore
 ├── README.md               # This file
 ├── AGENTS.md               # Agent/coding guidelines
-├── config.json             # Shared configuration (personas, scheduling, URLs)
-├── discord_bot/            # Discord bot application
-│   ├── bot.py              # Main bot + FastAPI server
-│   ├── requirements.txt    # Python dependencies
-│   └── .env                # Environment variables (bot token only)
-└── langchain_agent/       # LangChain agent application
-    ├── agent.py            # Main agent + FastAPI server
-    ├── memory.db           # SQLite database (gitignored)
-    └── requirements.txt    # Python dependencies
+├── config.json             # Centralized configuration
+├── discord_bot/           # Discord bot + FastAPI (port 8000)
+├── langchain_agent/       # LangChain agent + FastAPI (port 8001)
+└── persona_ui/            # Persona config web UI (port 8002)
 ```
 
 ## Features
 
-*   **Dynamic Personas:** The LangChain agent can adopt different personas based on the Discord channel ID. This allows for specialized interactions (e.g., a "Trainer" persona for fitness-related channels, a "Coding Assistant" for tech channels).
-*   **Proactive Messaging:** The Discord bot can schedule and send proactive messages from the LangChain agent to specific Discord channels, enabling features like automated check-ins or reminders.
-*   **Time Window Scheduling:** Proactive messages can be restricted to specific hours (e.g., 19:00-22:00).
-*   **API-driven Communication:** Both components communicate via FastAPI endpoints, providing a flexible and scalable architecture.
-*   **Conversation History:** The LangChain agent maintains conversation history using an SQLite database.
-*   **Health Data Logging:** Users can log health metrics (weight, steps, sleep) via Discord messages.
-*   **User Profile Management:** Users can set profile data (age, height, activity level) for personalized coaching.
+| Feature | Description |
+|---------|-------------|
+| **Dynamic Personas** | AI personas per Discord channel (Trainer, Math Tutor, etc.) |
+| **Workout Tracking** | Structured walking routine with jump rope and bodyweight exercises |
+| **Health Logging** | Log weight, steps, sleep via Discord |
+| **Proactive Reminders** | Scheduled check-in messages with time windows |
+| **User Profiles** | Store age, height, goals for personalized coaching |
+| **Conversation Memory** | SQLite-backed chat history per channel |
+| **Web UI** | Visual interface for managing personas and schedules |
 
-## Setup and Installation
-
-### Prerequisites
-
-*   Python 3.10+
-*   A Discord account and a created Discord Bot (see `discord_bot/README.md` for details).
-*   Ollama running locally with the `llama3:8b` model.
-
-### 1. Clone the Repository
+## Quick Start
 
 ```bash
-git clone <your-repo-url>
-cd personal-coach-agent
+# Terminal 1: Ollama
+ollama serve
+
+# Terminal 2: LangChain Agent
+cd langchain_agent && source venv/bin/activate && python agent.py
+
+# Terminal 3: Discord Bot
+cd discord_bot && source venv/bin/activate && python bot.py
+
+# Terminal 4: Persona UI (optional)
+cd persona_ui && source venv/bin/activate && python server.py
 ```
 
-### 2. Set Up Python Virtual Environments
+Then open http://localhost:8002 in your browser.
 
-Each component (`discord_bot` and `langchain_agent`) has its own virtual environment and dependencies.
+## Web UI (Persona Management)
 
-#### For `discord_bot`:
+The Persona UI runs on port 8002 and provides:
+- View all personas
+- Edit persona details (name, description, prompt)
+- Add/edit/delete proactive check-in schedules
+- Pause/resume schedules instantly
+- Reload bot to apply changes
 
-```bash
-cd discord_bot
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+### Check-in Schedule Fields
+
+| Field | Description |
+|-------|-------------|
+| `id` | Unique identifier for the schedule |
+| `name` | Display name (e.g., "Workout Reminder") |
+| `enabled` | Whether the schedule is active (true/false) |
+| `interval_seconds` | How often to send messages (e.g., 7200 = 2 hours) |
+| `time_window` | Time range with minute precision (`start_hour`, `start_minute`, `end_hour`, `end_minute`) |
+| `message_content` | The message to send. Use `WORKOUT_REMINDER` for automatic workout content |
+
+### Time Window
+
+Check-ins can be configured with minute precision:
+
+```json
+"time_window": {
+  "start_hour": 8,
+  "start_minute": 55,
+  "end_hour": 20,
+  "end_minute": 30
+}
 ```
 
-#### For `langchain_agent`:
+This example shows a check-in active between 8:55 AM and 8:30 PM.
 
-```bash
-cd langchain_agent
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
+### Pause/Resume Behavior
 
-### 3. Configure Environment Variables
-
-Create a `.env` file in the `discord_bot` directory (`discord_bot/.env`):
-
-```
-DISCORD_TOKEN="YOUR_DISCORD_BOT_TOKEN"
-```
-
-Other configurations (agent URLs, personas, scheduling) are managed in `config.json`.
-
-### 4. Invite the Discord Bot to Your Server
-
-Follow the instructions in `discord_bot/README.md` to invite your bot to your Discord server and grant it necessary permissions.
-
-## Running the Project
-
-To run the entire project, you need to start both the `langchain_agent` and the `discord_bot` in separate terminals.
-
-### 1. Start Ollama (required for langchain_agent)
-
-```bash
-ollama serve  # In one terminal
-```
-
-### 2. Start the `langchain_agent`
-
-```bash
-cd langchain_agent
-source venv/bin/activate
-python agent.py  # Runs on http://0.0.0.0:8001
-```
-
-### 3. Start the `discord_bot`
-
-```bash
-cd discord_bot
-source venv/bin/activate
-python bot.py  # Runs on http://0.0.0.0:8000
-```
+- **Pause Button**: Instantly stops the scheduler and updates config.json with `enabled: false`
+- **Resume Button**: Instantly resumes the scheduler and updates config.json with `enabled: true`
+- **Enabled Checkbox**: Sets initial state on bot reload (requires "Reload Schedules" to take effect)
+- **Reload**: Re-reads config.json and recreates all scheduled jobs based on `enabled` field
 
 ## Configuration
 
-All configuration is centralized in `config.json` in the project root. The config is organized by persona, with proactive scheduling per-persona.
+All settings in `config.json`:
 
 ```json
 {
-  "_meta": { "version": "1.0" },
-  "_database": {
-    "db_connection_string": "sqlite:///memory.db",
-    "conversation_history_limit": 20
-  },
-  "_discord": {
-    "bot_url": "http://localhost:8000",
-    "agent_webhook_url": "http://localhost:8001/message",
-    "langchain_agent_url": "http://localhost:8001"
-  },
+  "_database": { "db_connection_string": "sqlite:///memory.db" },
+  "_discord": { "bot_url": "http://localhost:8000" },
   "personas": {
-    "default": {
-      "prompt": "You are a helpful general-purpose AI assistant."
-    },
     "CHANNEL_ID": {
       "name": "Persona Name",
-      "description": "What this persona does.",
-      "prompt": "Your persona prompt here...",
-      "proactive_scheduling": {
-        "enabled": true,
-        "interval_seconds": 300,
-        "time_window": { "start_hour": 19, "end_hour": 22 },
-        "message_content": null
-      }
+      "prompt": "System prompt...",
+      "proactive_scheduling": [
+        {
+          "id": "workout_reminder",
+          "name": "Workout Reminder",
+          "enabled": true,
+          "interval_seconds": 7200,
+          "time_window": {
+            "start_hour": 18,
+            "start_minute": 0,
+            "end_hour": 19,
+            "end_minute": 0
+          },
+          "message_content": "WORKOUT_REMINDER"
+        }
+      ]
     }
   }
 }
 ```
 
-### Config Sections
+### API Endpoints
 
-- **_meta**: Version and metadata
-- **_database**: Database connection and history limit
-- **_discord**: Discord bot and agent URLs
-- **personas**: Each persona keyed by Discord channel ID, with:
-  - **name**: Display name for logging
-  - **description**: Human-readable description
-  - **prompt**: System prompt for the LLM
-  - **proactive_scheduling**: Optional per-persona scheduling
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/config` | GET | Get full config |
+| `/api/config` | PUT | Update persona |
+| `/api/config/reload` | POST | Reload bot schedules |
+| `/api/schedules` | GET | Get all active schedules |
+| `/api/schedules/{job_id}/pause` | POST | Pause a schedule |
+| `/api/schedules/{job_id}/resume` | POST | Resume a schedule |
+| `/api/schedules/{job_id}/remove` | POST | Remove a schedule |
 
-### Proactive Scheduling (per-persona)
-
-Each persona can have its own proactive schedule:
-- **enabled**: Set to `true` to enable
-- **interval_seconds**: How often to check (not frequency of messages)
-- **time_window**: Optional `{start_hour, end_hour}` to restrict to specific hours
-- **message_content**: Custom prompt or `null` for default check-in
-
-## Usage
-
-### Chat with the Bot
-
-Send messages in any Discord channel the bot has access to. The agent responds based on the persona configured for that channel.
-
-### Health Data Logging
-
-Start your message with "Log health:":
+## Health Data Logging
 
 ```
 Log health: Weight: 75.5kg
 Log health: Walked 10000 steps
-Log health: 5km walk
 Log health: Slept 7.5 hours
-Log health: Goals: 12000 steps, 30min run
 ```
 
-### Health Data Querying
-
+**Querying:**
 ```
 How much did I walk this week?
 What is my weight today?
-How many steps did I take yesterday?
 ```
 
-### User Profile
+## User Profile
 
 ```
 Set profile: Age: 30, Sex: Male, Height: 175cm, Goal weight: 70kg, Activity: moderate
 Update profile: Age: 31, Activity: active
 ```
 
-### Database Queries
+## Database
 
-To view data directly in the database:
+SQLite database at `langchain_agent/memory.db`:
 
 ```bash
+sqlite3 langchain_agent/memory.db "SELECT * FROM workout_log;"
+sqlite3 langchain_agent/memory.db "SELECT * FROM jump_rope_session;"
+sqlite3 langchain_agent/memory.db "SELECT * FROM bodyweight_exercise;"
 sqlite3 langchain_agent/memory.db "SELECT * FROM health_log;"
 sqlite3 langchain_agent/memory.db "SELECT * FROM user_profile;"
 ```
