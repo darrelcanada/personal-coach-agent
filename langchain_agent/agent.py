@@ -696,6 +696,7 @@ def get_workout_reminder() -> str:
 
 
 llm = Ollama(model="llama3:8b")
+LLM_MODEL = "llama3:8b"
 
 app = FastAPI()
 
@@ -781,7 +782,18 @@ async def _process_message(
     )
     limited_history = history.messages[-CONVERSATION_HISTORY_LIMIT:]
 
-    print(f"[{channel_id}] Invoking LLM (proactive={is_proactive})")
+    print(f"""
+============================================================
+  LLM INVOCATION
+============================================================
+  Model:       {LLM_MODEL}
+  Mode:        {"PROACTIVE" if is_proactive else "REACTIVE"}
+  Channel:     {channel_id}
+  History:     {len(limited_history)} messages in context
+  Prompt:      {persona_prompt[:50].replace(chr(10), " ")}...
+  Input:       {content[:50]}...
+============================================================""")
+
     ai_response = chain.invoke({"input": content, "chat_history": limited_history})
 
     if not is_proactive:
